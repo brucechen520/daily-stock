@@ -11,7 +11,7 @@ AI 台股盤後分析研究工具。輸入台股公開資料（大盤、三大�
 | 面向 | 具體實物 |
 | --- | --- |
 | **AI 工程** | prompt 防幻覺（模板代入，數字由程式填）、LLM/Embedding 雙 provider 抽象、RAG（pgvector + hybrid 檢索）、tool-use agent（含 trace）、三層 eval harness 進 CI |
-| **後端** | Go 分層架構、資料建模（SQLite → Postgres/pgvector）、排程 ingestion、REST + SSE API、mock/fake 驅動的測試 |
+| **後端** | Go 分層架構、Postgres/pgvector 資料建模（raw + normalized 雙層）、爬蟲 + 排程自動 ingestion（冪等 upsert）、REST + SSE API、testcontainers 整合測試 |
 | **全端** | React + TS 前端四頁：摘要（SSE 逐字）、個股（K線 + 因子貢獻）、agent 對話（tool-call trace 側欄）、eval 儀表板 |
 
 ## 設計原則
@@ -25,7 +25,7 @@ AI 台股盤後分析研究工具。輸入台股公開資料（大盤、三大�
 ## 架構分層
 
 ```
-① Ingestion   抓行情/籌碼/新聞 → 落地（SQLite / Postgres）
+① Ingestion   排程爬蟲抓行情/籌碼/新聞 → Postgres(pgvector) 落地，全自動
 ② Compute     技術指標（MA/KD/MACD/RSI）、籌碼因子（連買連賣天數）
 ③ Signal      因子打分 → 分級 → 候選訊號（walk-forward 回測驗證）
 ④ LLM         provider 介面 → 白話解讀 / RAG / agent + eval harness
@@ -36,7 +36,8 @@ AI 台股盤後分析研究工具。輸入台股公開資料（大盤、三大�
 
 | Phase | 內容 | 文件 |
 | --- | --- | --- |
-| 全局 | 順序、模組表、資料來源、風險紀律 | [docs/ROADMAP.md](docs/ROADMAP.md) |
+| **0** | 產品需求規格書（PRD）：功能模組 M1–M9、使用者故事、驗收標準、法遵紅線。**產品化情境的規格演練，現階段未對外** | [docs/phase-0-prd.md](docs/phase-0-prd.md) |
+| 全局 | 工程順序、模組表、資料來源、風險紀律 | [docs/ROADMAP.md](docs/ROADMAP.md) |
 | **1** | 盤後白話摘要 MVP：TWSE 資料 + LLM 摘要 + 術語 + eval set | [docs/phase-1.md](docs/phase-1.md) |
 | **2'** | 回測極簡版（timebox）：單因子 walk-forward 跑通；完整量化版留作 2'' | [docs/phase-2.md](docs/phase-2.md) |
 | **3** | 新聞 RAG（pgvector + hybrid 檢索）+ 個股問答 agent + agent eval | [docs/phase-3.md](docs/phase-3.md) |
@@ -47,13 +48,19 @@ AI 台股盤後分析研究工具。輸入台股公開資料（大盤、三大�
 ## 快速開始
 
 ```bash
-# Phase 1（CLI）
+# 基礎設施（Phase 1 起）：pg(pgvector) + redis；kafka / ollama 走 profile
+docker compose up -d
 cp .env.example .env            # 填 ANTHROPIC_API_KEY（或用 --provider ollama 免金鑰）
+
+# 自動排程（平日盤後抓資料 + 生成摘要、每 30 分鐘抓新聞）
+go run ./cmd/daily-stock schedule
+
+# 手動指令（補抓 / 回補 / debug）
+go run ./cmd/daily-stock ingest --date 2026-08-07
 go run ./cmd/daily-stock summary --date 2026-08-07
 go run ./cmd/daily-stock eval
 
-# Phase 4 之後（整套：API + 前端 + pgvector）
-docker compose up -d
+# Phase 4 之後（app 容器化 + 前端）
 open http://localhost:8080
 ```
 
@@ -65,7 +72,7 @@ open http://localhost:8080
 | --- | --- | --- |
 | 大盤指數 / 個股日K / 三大法人 | TWSE OpenAPI（免費、盤後）| 1 |
 | 融資融券 / 財報 | FinMind | 2 |
-| 財金新聞 | 鉅亨 / 經濟日報 RSS | 3 |
+| 財金新聞 | 鉅亨 / 經濟日報 RSS | 1（抓取落地）/ 3（RAG）|
 
 ## Known Limitations
 

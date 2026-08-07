@@ -144,45 +144,25 @@ ENTRYPOINT ["/daily-stock", "serve"]
 
 前端靜態檔用 `go:embed` 塞進 binary：部署物只有一個檔 + 一個 DB，之後搬任何雲都最省事。
 
-### docker-compose.yml
+### docker-compose.yaml：只加 app service
+
+基礎設施（pg/redis/kafka/ollama）**Phase 1 的 compose 就建好了**（見 `phase-1.md` §1），本階段只是把開發期跑在 host 的 app 也裝進 compose：
 
 ```yaml
-services:
+# 加進 Phase 1 的 docker-compose.yaml
   app:
     build: .
+    command: ["serve", "--with-scheduler"]   # API + 內建排程一起跑
     ports: ["127.0.0.1:8080:8080"]
     env_file: .env                     # ANTHROPIC_API_KEY / VOYAGE_API_KEY…，不進 image
     environment:
       DATABASE_URL: postgres://stock:devpass_change_me@db:5432/stock?sslmode=disable
+      REDIS_ADDR: redis:6379
     depends_on:
       db: { condition: service_healthy }
-
-  db:
-    image: pgvector/pgvector:pg17
-    environment:
-      POSTGRES_USER: stock
-      POSTGRES_PASSWORD: devpass_change_me   # 換成自己的
-      POSTGRES_DB: stock
-    ports: ["127.0.0.1:5432:5432"]           # 只綁本機（同 redis-kit 的教訓）
-    volumes: [pgdata:/var/lib/postgresql/data]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U stock"]
-      interval: 5s
-      retries: 10
-
-  # 地端模型（可選）：docker compose --profile local-llm up
-  ollama:
-    image: ollama/ollama
-    profiles: ["local-llm"]
-    ports: ["127.0.0.1:11434:11434"]
-    volumes: [ollama:/root/.ollama]
-
-volumes:
-  pgdata:
-  ollama:
 ```
 
-- 排程（每日抓資料 + 生成摘要）：本階段用 host cron 打 `docker compose exec app /daily-stock ingest`，不引入額外排程元件。
+- 排程沿用 Phase 1 的 in-process scheduler（`--with-scheduler`），app 容器一顆就含 API + 排程,不引入額外元件。
 - **雲端部署：延後**。到時的選項（Fly.io / GCP Cloud Run / VPS）都吃這個 image，屆時只補 secrets 管理與 managed Postgres 遷移，程式不動。
 
 ### CI（GitHub Actions，最小集）

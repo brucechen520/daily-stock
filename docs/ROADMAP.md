@@ -5,6 +5,8 @@ AI 台股盤後分析工具。輸入台股資料（大盤、三大法人籌碼�
 定位：**理解 + 研究**。訊號 = 「可回測的規則引擎 + 真實因子打分」產生候選，LLM 只負責解讀「為什麼」與教學，**不憑空喊單**。本專案僅供個人學習與回測研究使用，不對外提供投資建議或投資顧問服務。
 
 > ⚠️ **範圍與定位聲明**：本工具產出之訊號、解讀與任何內容均為研究與教育性質，非投資建議，不構成任何買賣邀約。開發者不對使用本工具所生之投資決策負責。
+>
+> 📋 產品需求規格見 [phase-0-prd.md](phase-0-prd.md)（產品化情境的規格演練，現階段未對外；若未來對外需先完成其 §1.1 法遵行動項）。本 ROADMAP 是它的工程對應。
 
 ## 設計原則
 
@@ -28,8 +30,10 @@ AI 台股盤後分析工具。輸入台股資料（大盤、三大法人籌碼�
 
 | package | 職責 |
 | --- | --- |
+| `internal/store` | pgx 連線池 + goose migrations + repository（upsert 冪等）|
+| `internal/scheduler` | cron 排程 + rediskit lock + 重試（全自動抓取）|
 | `internal/llm` | Provider 介面 + Anthropic / OpenAI-compat adapter + factory |
-| `internal/market` | 行情/籌碼資料源介面 + TWSE client + mock |
+| `internal/market` | TWSE 爬蟲 Fetcher + mock（查詢一律走 store）|
 | `internal/indicator` | 技術指標（MA/KD/MACD/RSI）+ 籌碼因子（Phase 2）|
 | `internal/signal` | 因子打分 → 訊號 + 回測（walk-forward，Phase 2）|
 | `internal/eval` | LLM 輸出忠實度 eval harness（Phase 1 起）|
@@ -46,7 +50,7 @@ AI 台股盤後分析工具。輸入台股資料（大盤、三大法人籌碼�
 
 | Phase | 目標 | 產出 | 狀態 |
 | --- | --- | --- | --- |
-| **1** | 盤後白話摘要 MVP | TWSE 大盤 + 三大法人 + 個股日K → LLM 白話摘要 + 術語註解；provider 可切 Claude/地端；輸出忠實度 eval set。CLI 一天跑一次 | **本階段**，詳見 `phase-1.md` |
+| **1** | 盤後白話摘要 MVP + 自動資料管線 | 排程器自動抓 TWSE 大盤/三大法人/個股日K + 新聞 RSS → **直接落地 Postgres(pgvector)**；LLM 白話摘要（模板代入防幻覺）+ 術語註解；provider 可切；eval set。compose 起 pg/redis（kafka/ollama 走 profile）| **本階段**，詳見 `phase-1.md` |
 | **2'** | 回測極簡版（timebox 一週）| 單一因子（外資連買天數）+ 固定參數 + walk-forward 跑通一輪。目的是讓「訊號經回測」為真，不是做完整量化平台 | 詳見 `phase-2.md`（只做「極簡版」小節範圍）|
 | **3** | 新聞 RAG + 個股問答 agent | 新聞 embedding(pgvector) + hybrid 檢索 + LLM tool-use agent + agent eval | **AI 練習主菜**，詳見 `phase-3.md` |
 | **4** | Web dashboard + 基本容器化 | Go API（REST + SSE streaming）+ React/TS 前端四頁 + Dockerfile/compose + CI eval gate；雲端部署延後 | 詳見 `phase-4.md` |
@@ -61,7 +65,7 @@ AI 台股盤後分析工具。輸入台股資料（大盤、三大法人籌碼�
 | 大盤指數 / 個股日K | TWSE OpenAPI（免費、盤後）| 1 |
 | 三大法人買賣超（外資/投信/自營商）| TWSE OpenAPI | 1 |
 | 融資融券 / 借券 / 財報 | FinMind | 2 |
-| 財金新聞 | 鉅亨 / 經濟日報 RSS | 3 |
+| 財金新聞 | 鉅亨 / 經濟日報 RSS | 1（抓取落地）/ 3（RAG）|
 | 即時報價 | 富果 Fugle / 券商 API | 4 |
 
 ## Known Limitations

@@ -36,24 +36,14 @@
 
 ## 子模組拆解
 
-### 1. `internal/news` — 抓取、清洗、chunking
+### 1. `internal/news` — chunking（抓取已於 Phase 1 完成）
 
-**抓取**：官方 RSS 優先（鉅亨、經濟日報），`robots.txt` 尊重，不整篇轉存原文對外展示（版權紀律，見 ROADMAP）。落地欄位：
+新聞抓取、清洗、`news` 表落地在 Phase 1 的自動排程管線就做了（見 `phase-1.md` §2）——本 phase 進場時 `news` 表已日積月累一段時間，起手就有真實語料可嵌入。這裡只補 chunking + embedding + 檢索。
 
-```sql
-CREATE TABLE news (
-    id           BIGSERIAL PRIMARY KEY,
-    source       TEXT NOT NULL,          -- 'cnyes' / 'money-udn'
-    url          TEXT NOT NULL UNIQUE,   -- 去重鍵
-    title        TEXT NOT NULL,
-    body         TEXT NOT NULL,          -- 清洗後純文字
-    published_at TIMESTAMPTZ NOT NULL,
-    symbols      TEXT[] DEFAULT '{}',    -- 內文提及的股號（正則 + 公司名對照表抽取）
-    fetched_at   TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-```
+**觸發方式二選一**（對應 Phase 1 §2.5 的 kafka feature flag）：
 
-**清洗**：去 HTML、去廣告尾綴、去「延伸閱讀」區塊。清洗規則要有單元測試（餵髒 HTML 對答案）。
+- **輪詢版（預設）**：排程每 30 分鐘掃 `news` 表裡「尚無對應 chunk」的新資料 → chunk + embed。簡單、無額外依賴。
+- **事件版（開 `ENABLE_KAFKA` 時）**：embedding worker 用 kafkakit Consumer 訂閱 `raw.ingested`（source=news），事件驅動即時處理。練 kafka 解耦的地方就是這裡。
 
 **Chunking 策略**（財金新聞短，不需要複雜遞迴切分）：
 
