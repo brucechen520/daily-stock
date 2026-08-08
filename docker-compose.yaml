@@ -1,0 +1,47 @@
+# 基礎設施 only：app 開發期在 host 用 go run 跑（Phase 4 才容器化 app）
+#   日常:        docker compose up -d            (pg + redis)
+#   地端模型:    docker compose --profile local-llm up -d
+#   kafka 管線:  docker compose --profile pipeline up -d
+services:
+  db:
+    image: pgvector/pgvector:pg17 # day 1 就用 pgvector image，Phase 3 免換
+    environment:
+      POSTGRES_USER: stock
+      POSTGRES_PASSWORD: devpass_change_me # 換成你自己的
+      POSTGRES_DB: stock
+    ports: ["127.0.0.1:5433:5432"] # 只綁本機；host 用 5433 避開本機既有 pg
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stock"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    command: redis-server --requirepass devpass_change_me --maxmemory 128mb --maxmemory-policy allkeys-lru
+    ports: ["127.0.0.1:6380:6379"] # host 用 6380 避開本機既有 redis
+
+  kafka: # 可選：ingestion 事件（ENABLE_KAFKA=true 才會用到）
+    image: apache/kafka:3.9
+    profiles: ["pipeline"]
+    ports: ["127.0.0.1:9092:9092"]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://:29092,CONTROLLER://:29093,HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  ollama: # 可選：地端 LLM 對照組
+    image: ollama/ollama
+    profiles: ["local-llm"]
+    ports: ["127.0.0.1:11434:11434"]
+    volumes: [ollama:/root/.ollama]
+
+volumes:
+  pgdata:
+  ollama:

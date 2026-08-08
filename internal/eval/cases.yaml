@@ -1,0 +1,185 @@
+# LLM 輸出忠實度 golden set。
+# 每 case：輸入數據（真值）→ 生成摘要 → 斷言：
+#   must_mention:  代入後輸出必須出現的字串（數字正確性 + 方向不曲解）
+#   forbidden:     不可出現的字串（案例特定；通用建議黑名單另在程式裡）
+# 數字類斷言可靠因為模板代入——出現就一定是真值；這裡驗的是「該提的有提、方向沒講反」。
+
+- name: 大漲日外資大買
+  index_close: 44611.60
+  index_change: 1250.94
+  foreign_net: 35000000000   # 買超 350 億
+  trust_net: 5000000000
+  dealer_net: 2000000000
+  must_mention: ["44,611.60", "上漲", "買超 350.0 億元"]
+  forbidden: ["下跌", "賣超 350"]
+
+- name: 大跌日外資大賣
+  index_close: 42000.00
+  index_change: -1100.50
+  foreign_net: -42000000000
+  trust_net: -3000000000
+  dealer_net: -1500000000
+  must_mention: ["42,000.00", "下跌", "賣超 420.0 億元"]
+  forbidden: ["上漲", "買超 420"]
+
+- name: 小漲日法人分歧
+  index_close: 44396.70
+  index_change: 266.66
+  foreign_net: 2019818140
+  trust_net: 9408386624
+  dealer_net: -6312818587
+  must_mention: ["44,396.70", "買超 20.2 億元", "買超 94.1 億元", "賣超 63.1 億元"]
+  forbidden: []
+
+- name: 平盤日
+  index_close: 43000.00
+  index_change: 0
+  foreign_net: 500000000
+  trust_net: -500000000
+  dealer_net: 0
+  must_mention: ["43,000.00"]
+  forbidden: []
+
+- name: 外資買投信賣
+  index_close: 43500.00
+  index_change: 150.00
+  foreign_net: 8000000000
+  trust_net: -2000000000
+  dealer_net: 100000000
+  must_mention: ["買超 80.0 億元", "賣超 20.0 億元"]
+  forbidden: []
+
+- name: 外資賣投信買
+  index_close: 43200.00
+  index_change: -80.00
+  foreign_net: -12000000000
+  trust_net: 6000000000
+  dealer_net: -300000000
+  must_mention: ["賣超 120.0 億元", "買超 60.0 億元"]
+  forbidden: []
+
+- name: 三大法人同買
+  index_close: 45000.00
+  index_change: 600.00
+  foreign_net: 20000000000
+  trust_net: 8000000000
+  dealer_net: 4000000000
+  must_mention: ["上漲", "買超 200.0 億元", "買超 80.0 億元", "買超 40.0 億元"]
+  forbidden: ["賣超"]
+
+- name: 三大法人同賣
+  index_close: 41500.00
+  index_change: -900.00
+  foreign_net: -30000000000
+  trust_net: -7000000000
+  dealer_net: -5000000000
+  must_mention: ["下跌", "賣超 300.0 億元"]
+  forbidden: ["買超"]
+
+- name: 微幅買超雜訊
+  index_close: 43800.00
+  index_change: 30.00
+  foreign_net: 100000000    # 買超 1 億，極小
+  trust_net: 50000000
+  dealer_net: -20000000
+  must_mention: ["買超 1.0 億元"]
+  forbidden: []
+
+- name: 千億級歷史大買
+  index_close: 46000.00
+  index_change: 1800.00
+  foreign_net: 100000000000
+  trust_net: 15000000000
+  dealer_net: 8000000000
+  must_mention: ["買超 1000.0 億元", "上漲"]
+  forbidden: ["賣超 1000"]
+
+- name: 指數破五萬點格式
+  index_close: 50123.45
+  index_change: 200.00
+  foreign_net: 1000000000
+  trust_net: 1000000000
+  dealer_net: 1000000000
+  must_mention: ["50,123.45"]
+  forbidden: []
+
+- name: 指數四萬以下格式
+  index_close: 39876.54
+  index_change: -50.00
+  foreign_net: -1000000000
+  trust_net: 2000000000
+  dealer_net: -500000000
+  must_mention: ["39,876.54"]
+  forbidden: []
+
+- name: 大漲但外資反向賣
+  index_close: 44800.00
+  index_change: 700.00
+  foreign_net: -5000000000
+  trust_net: 9000000000
+  dealer_net: 1000000000
+  must_mention: ["上漲", "賣超 50.0 億元", "買超 90.0 億元"]
+  forbidden: []
+
+- name: 大跌但外資反向買
+  index_close: 42800.00
+  index_change: -600.00
+  foreign_net: 15000000000
+  trust_net: -4000000000
+  dealer_net: -2000000000
+  must_mention: ["下跌", "買超 150.0 億元"]
+  forbidden: []
+
+- name: 自營商大動作
+  index_close: 43600.00
+  index_change: 100.00
+  foreign_net: 500000000
+  trust_net: 300000000
+  dealer_net: -9000000000
+  must_mention: ["賣超 90.0 億元"]
+  forbidden: []
+
+- name: 投信連續作帳情境
+  index_close: 44100.00
+  index_change: 350.00
+  foreign_net: -1000000000
+  trust_net: 12000000000
+  dealer_net: 500000000
+  must_mention: ["買超 120.0 億元"]
+  forbidden: []
+
+- name: 漲跌幅接近漲停情緒日
+  index_close: 47500.00
+  index_change: 2500.00
+  foreign_net: 60000000000
+  trust_net: 10000000000
+  dealer_net: 6000000000
+  must_mention: ["上漲", "買超 600.0 億元"]
+  forbidden: ["下跌"]
+
+- name: 崩盤情緒日
+  index_close: 39000.00
+  index_change: -2800.00
+  foreign_net: -80000000000
+  trust_net: -10000000000
+  dealer_net: -7000000000
+  must_mention: ["下跌", "賣超 800.0 億元"]
+  forbidden: ["上漲"]
+
+- name: 外資零買賣邊界
+  index_close: 43300.00
+  index_change: 20.00
+  foreign_net: 0
+  trust_net: 1000000000
+  dealer_net: -1000000000
+  must_mention: ["買超 0.0 億元"]
+  forbidden: []
+
+- name: 量縮整理日
+  index_close: 43450.00
+  index_change: -15.00
+  foreign_net: -800000000
+  trust_net: 600000000
+  dealer_net: -100000000
+  must_mention: ["43,450.00", "賣超 8.0 億元"]
+  forbidden: []
