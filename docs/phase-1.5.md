@@ -221,15 +221,27 @@ sender  → 把 Section 塞進通道限制（Discord 單則 2000 字元）  ← 
 
 ### 週 1 — 能動的最小推播（約 25h）
 
-- [ ] `002` migration：`watchlist` 表（+ `institutional_stock_daily`、`corporate_actions`、`adj_close` 一併建好，本週只用 watchlist）
-- [ ] `data/positions.local.sql` 建 20 檔持倉（**先加 `.gitignore`**，見 §7）+ repo 內留 `positions.example.sql`
-- [ ] 20 檔 × 12 個月日K backfill 執行 + 抽驗資料正確
-- [ ] `internal/indicator`：當日漲跌幅（最小集）
-- [ ] `internal/notify`：Discord webhook sender + render/sender 分層 + 多則切割
-- [ ] 排程 18:30 接上推播
-- [ ] **本週推播結尾標註**：`⚠️ 未還原股價，除權息日數字失真`（第 3 週拿掉）
+- [x] `002_watchlist_and_adjust.sql`：`watchlist` 表（+ `institutional_stock_daily`、`corporate_actions`、`adj_close` 一併建好，本週只用 watchlist）
+- [x] `.gitignore` 擋掉 `data/*.local.sql` + repo 內留 `data/positions.example.sql`
+- [ ] **`data/positions.local.sql` 建 20 檔持倉**（需要真實持股清單）
+- [ ] **20 檔 × 12 個月日K backfill 執行 + 抽驗資料正確**（同上，需要清單）
+- [x] `internal/indicator`：當日漲跌幅（最小集）
+- [x] `internal/notify`：Discord webhook sender + render/sender 分層 + 多則切割（上限以**字元**計，中文才不會被多切三倍）
+- [x] `internal/digest`：render 層（讀 pg → 組 Section），與 `ingest` 對稱
+- [x] `daily-stock push [--date] [--dry]`、`daily-stock watch list|add|remove`
+- [x] 排程 18:30 接上推播（`daily-digest` job）
+- [x] **本週推播結尾標註**：`⚠️ 未還原股價，除權息日數字失真`（第 3 週拿掉）
+- [ ] **`DISCORD_WEBHOOK_URL` 填值**（需要 webhook 網址）
 
 **週 1 末交付**：大盤摘要 + 20 檔當日漲跌幅，每天自動進 Discord。
+
+#### 週 1 實作與 spec 的差異（已知取捨）
+
+| 項目 | 差異 | 理由 |
+| --- | --- | --- |
+| §4.3「非交易日不推」 | 改成推一則「今日盤後資料尚未到位（非交易日，或 TWSE 尚未更新）」 | 單靠 DB 分不出「非交易日」與「ingest 失敗」，而後者靜默的代價高得多。實測 TWSE OpenAPI 16:00 仍停在前一交易日，這條路徑會常走到。接上交易日曆後再收斂成不推。|
+| 「無異動」門檻 | 定為漲跌幅 ±3%；查無資料視為有異動 | spec 未定義。週 2 補上量能比與法人連買後，那些也會成為異動條件（單看漲跌幅會漏掉量爆價平）。|
+| 摘要落地 | `digest.Build` 負責寫 `summaries`，`summary` 指令改走同一條路 | 落地若留在呼叫端，排程漏寫一整週都不會有人發現。|
 
 ### 週 2 — 加厚成真正的追蹤（約 24h）
 

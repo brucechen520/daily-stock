@@ -24,6 +24,9 @@ type Config struct {
 
 	NewsFeeds []string
 
+	// DiscordWebhookURL 空 = 不推播（push 指令會明確報錯，不靜默跳過）。
+	DiscordWebhookURL string
+
 	EnableKafka  bool // 預留（Phase 3 事件管線），Phase 1 不使用
 	KafkaBrokers string
 }
@@ -47,8 +50,10 @@ func Load() Config {
 		OllamaURL:       os.Getenv("OLLAMA_URL"),
 		OllamaModel:     os.Getenv("OLLAMA_MODEL"),
 		NewsFeeds:       feeds,
-		EnableKafka:     os.Getenv("ENABLE_KAFKA") == "true",
-		KafkaBrokers:    os.Getenv("KAFKA_BROKERS"),
+
+		DiscordWebhookURL: os.Getenv("DISCORD_WEBHOOK_URL"),
+		EnableKafka:       os.Getenv("ENABLE_KAFKA") == "true",
+		KafkaBrokers:      os.Getenv("KAFKA_BROKERS"),
 	}
 }
 

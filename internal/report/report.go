@@ -38,8 +38,8 @@ func (s Snapshot) Fields() map[string]string {
 	}
 	return map[string]string{
 		"date":              s.Date.Format("2006-01-02"),
-		"index_close":       formatFloat(s.IndexClose),
-		"index_change_desc": fmt.Sprintf("%s %s 點（%+.2f%%）", upDown(s.IndexChange), formatFloat(abs(s.IndexChange)), pct),
+		"index_close":       FormatFloat(s.IndexClose),
+		"index_change_desc": fmt.Sprintf("%s %s 點（%+.2f%%）", upDown(s.IndexChange), FormatFloat(abs(s.IndexChange)), pct),
 		"foreign_net_desc":  netDesc(s.ForeignNet),
 		"trust_net_desc":    netDesc(s.TrustNet),
 		"dealer_net_desc":   netDesc(s.DealerNet),
@@ -73,8 +73,8 @@ func abs(v float64) float64 {
 	return v
 }
 
-// formatFloat 千分位 + 兩位小數（對齊 TWSE 慣例顯示）。
-func formatFloat(v float64) string {
+// FormatFloat 千分位 + 兩位小數（對齊 TWSE 慣例顯示）。digest 的持股行共用。
+func FormatFloat(v float64) string {
 	s := fmt.Sprintf("%.2f", v)
 	dot := strings.Index(s, ".")
 	intPart, frac := s[:dot], s[dot:]
@@ -99,7 +99,7 @@ const systemPrompt = `你是台股市場的說明員，把真實數據解讀成�
 嚴格規則（違反任何一條即為失敗）：
 1. 輸出中「不可出現任何阿拉伯數字」。所有數值一律用佔位符引用，格式 {欄位名}，只能用下方列出的欄位。
 2. 不可給出買賣建議（禁止「建議買進」「應該賣出」「可進場」「加碼」「停損」等字眼），只能解釋現象。
-3. 若參考數據區某項標示「無資料」，寫「今日無相關資料」，不可推測。
+3. 下方列出的每個欄位都有真實數據，一律不得聲稱資料缺漏或無法取得（禁止「無相關資料」「資料不足」「尚無數據」等說法）。
 4. 語氣中性克制，「偏多訊號之一」而非「大漲在即」。
 5. 產出 150-250 字，兩段：第一段大盤，第二段三大法人。不要標題、不要日期、不要免責聲明（程式會加）。
 
@@ -133,6 +133,11 @@ var (
 	digitRe       = regexp.MustCompile(`[0-9０-９]`)
 )
 
+// NoDataPhrase 是「資料缺失」話術。Fields() 永遠產出完整欄位，
+// 所以這句話出現一定是 LLM 誤用了缺資料的說法（地端小模型實際犯過）。
+// eval 也拿它當斷言，兩邊共用同一個字串。
+const NoDataPhrase = "無相關資料"
+
 // Validate 檢查 LLM 原始輸出（代入前）是否守規則。
 // 回傳的錯誤訊息會餵回給 LLM 重試一次。
 func Validate(text string, allowed map[string]string) error {
@@ -145,10 +150,17 @@ func Validate(text string, allowed map[string]string) error {
 	// 2. 佔位符以外不准出現任何數字——把佔位符挖掉後全文掃數字
 	stripped := placeholderRe.ReplaceAllString(text, "")
 	if loc := digitRe.FindStringIndex(stripped); loc != nil {
-		start := max(0, loc[0]-15)
-		end := min(len(stripped), loc[1]+15)
-		return fmt.Errorf("佔位符之外出現了數字（所有數值必須用佔位符），出現在「…%s…」",
-			strings.TrimSpace(stripped[start:end]))
+		// 片段擷取用 rune 切，byte 切會把中文字剖半產生無效 UTF-8（pg 會拒寫）
+		runes := []rune(stripped[:loc[0]])
+		prefix := string(runes[max(0, len(runes)-12):])
+		rest := []rune(stripped[loc[0]:])
+		suffix := string(rest[:min(len(rest), 12)])
+		return fmt.Errorf("佔位符之外出現了數字（所有數值必須用佔位符），出現在「…%s%s…」",
+			strings.TrimSpace(prefix), suffix)
+	}
+	// 3. 資料一律齊全（Fields 保證），不准聲稱缺資料
+	if strings.Contains(text, NoDataPhrase) {
+		return fmt.Errorf("出現「%s」，但所有欄位都有真實數據，不得聲稱資料缺漏", NoDataPhrase)
 	}
 	return nil
 }

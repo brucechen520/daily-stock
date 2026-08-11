@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: stock
       POSTGRES_PASSWORD: devpass_change_me # 換成你自己的
       POSTGRES_DB: stock
-    ports: ["127.0.0.1:5433:5432"] # 只綁本機；host 用 5433 避開本機既有 pg
+    ports: ["127.0.0.1:5432:5432"] # 只綁本機
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U stock"]
@@ -19,7 +19,7 @@ services:
   redis:
     image: redis:7
     command: redis-server --requirepass devpass_change_me --maxmemory 128mb --maxmemory-policy allkeys-lru
-    ports: ["127.0.0.1:6380:6379"] # host 用 6380 避開本機既有 redis
+    ports: ["127.0.0.1:6379:6379"] # 只綁本機
 
   kafka: # 可選：ingestion 事件（ENABLE_KAFKA=true 才會用到）
     image: apache/kafka:3.9

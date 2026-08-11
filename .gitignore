@@ -3,3 +3,4 @@
 # 持倉資料（成本、股數）絕不進版控——git 歷史清不掉，repo 有天要公開就麻煩了。
 # 範本見 data/positions.example.sql
 data/*.local.sql
+.DS_Store
