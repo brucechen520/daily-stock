@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>daily-stock — Roadmap 與 Phase 1 目標</title>
+<style>
+  :root {
+    --bg: #fbfaf8;
+    --surface: #ffffff;
+    --surface-2: #f4f2ee;
+    --border: #e2ded6;
+    --text: #26231e;
+    --text-dim: #6b655c;
+    --accent: #b8562a;
+    --accent-soft: #f6e9e1;
+    --ok: #2f7d4f;
+    --ok-soft: #e6f2ea;
+    --warn: #9a6b13;
+    --warn-soft: #f8efdb;
+    --mute: #6b655c;
+    --mute-soft: #eeebe5;
+    --code-bg: #f4f2ee;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #171512;
+      --surface: #201d19;
+      --surface-2: #272320;
+      --border: #38332c;
+      --text: #ece7df;
+      --text-dim: #9c948a;
+      --accent: #e08a5c;
+      --accent-soft: #34241b;
+      --ok: #6cc48d;
+      --ok-soft: #1c2b21;
+      --warn: #d9a94a;
+      --warn-soft: #2e2617;
+      --mute: #9c948a;
+      --mute-soft: #272320;
+      --code-bg: #272320;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #171512;
+    --surface: #201d19;
+    --surface-2: #272320;
+    --border: #38332c;
+    --text: #ece7df;
+    --text-dim: #9c948a;
+    --accent: #e08a5c;
+    --accent-soft: #34241b;
+    --ok: #6cc48d;
+    --ok-soft: #1c2b21;
+    --warn: #d9a94a;
+    --warn-soft: #2e2617;
+    --mute: #9c948a;
+    --mute-soft: #272320;
+    --code-bg: #272320;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC",
+                 "PingFang TC", "Microsoft JhengHei", sans-serif;
+    line-height: 1.75; font-size: 16px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 3rem 1.25rem 5rem; }
+
+  header { border-bottom: 2px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  .eyebrow {
+    font-family: var(--mono); font-size: .8rem; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 .5rem;
+  }
+  h1 { font-size: 2rem; line-height: 1.25; margin: 0 0 .6rem; letter-spacing: -.01em; }
+  .lede { color: var(--text-dim); margin: 0; font-size: 1.02rem; }
+
+  h2 {
+    font-size: 1.3rem; margin: 3rem 0 1rem; padding-top: 1.5rem;
+    border-top: 1px solid var(--border); letter-spacing: -.01em;
+  }
+  h2:first-of-type { border-top: none; padding-top: 0; }
+  h3 { font-size: 1.02rem; margin: 2rem 0 .6rem; }
+  p { margin: .8rem 0; }
+
+  code {
+    font-family: var(--mono); font-size: .88em;
+    background: var(--code-bg); padding: .12em .4em; border-radius: 4px;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1rem 1.1rem; overflow-x: auto; margin: 1rem 0; line-height: 1.65;
+  }
+  pre code { background: none; padding: 0; font-size: .86rem; }
+
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 1.25rem 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: .92rem; }
+  th, td { text-align: left; padding: .6rem .75rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--surface-2); font-weight: 600; font-size: .85rem; color: var(--text-dim); white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  table code { white-space: nowrap; }
+
+  /* 設計原則 */
+  .principles { display: grid; gap: .75rem; margin: 1.5rem 0; }
+  .principle {
+    display: grid; grid-template-columns: 2rem 1fr; gap: .9rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .85rem 1rem;
+  }
+  .principle .n {
+    font-family: var(--mono); font-weight: 600; font-size: .9rem; color: var(--accent);
+    background: var(--accent-soft); border-radius: 6px; text-align: center; height: 1.7rem; line-height: 1.7rem;
+  }
+  .principle .t { font-weight: 600; font-size: .95rem; }
+  .principle .d { color: var(--text-dim); font-size: .89rem; }
+
+  /* 架構分層 */
+  .layers { display: grid; gap: .4rem; margin: 1.5rem 0; }
+  .layer {
+    display: grid; grid-template-columns: 6.5rem 1fr; gap: 1rem; align-items: start;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .7rem 1rem;
+  }
+  .layer .name { font-weight: 600; font-size: .92rem; }
+  .layer .name small { display: block; font-family: var(--mono); font-size: .72rem; color: var(--accent); font-weight: 400; }
+  .layer .d { color: var(--text-dim); font-size: .89rem; }
+
+  /* phase timeline */
+  .phases { margin: 1.5rem 0; display: grid; gap: .6rem; }
+  .phase {
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 4px solid var(--mute); border-radius: 8px; padding: .9rem 1.1rem;
+  }
+  .phase.done { border-left-color: var(--ok); }
+  .phase.now  { border-left-color: var(--accent); background: var(--accent-soft); }
+  .phase.hold { border-left-color: var(--warn); }
+  .phase .top { display: flex; flex-wrap: wrap; gap: .6rem; align-items: baseline; margin-bottom: .3rem; }
+  .phase .id {
+    font-family: var(--mono); font-weight: 700; font-size: 1.05rem;
+  }
+  .phase .title { font-weight: 600; }
+  .phase .d { color: var(--text-dim); font-size: .89rem; }
+  .phase .d strong { color: var(--text); }
+
+  .badge {
+    display: inline-block; font-size: .72rem; font-family: var(--mono);
+    padding: .1rem .5rem; border-radius: 999px; white-space: nowrap;
+  }
+  .badge.done { background: var(--ok-soft); color: var(--ok); }
+  .badge.now  { background: var(--surface); color: var(--accent); border: 1px solid var(--accent); }
+  .badge.hold { background: var(--warn-soft); color: var(--warn); }
+  .badge.later{ background: var(--mute-soft); color: var(--mute); }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px;
+    padding: .9rem 1.1rem; margin: 1.25rem 0;
+  }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .label {
+    font-family: var(--mono); font-size: .75rem; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--accent); display: block; margin-bottom: .3rem;
+  }
+  .callout.warn .label { color: var(--warn); }
+
+  /* DoD checklist */
+  ul.dod { list-style: none; padding: 0; margin: 1.25rem 0; }
+  ul.dod li {
+    display: grid; grid-template-columns: 1.6rem 1fr; gap: .6rem;
+    padding: .5rem 0; border-bottom: 1px solid var(--border); font-size: .93rem;
+  }
+  ul.dod li:last-child { border-bottom: none; }
+  ul.dod .mark { font-family: var(--mono); font-weight: 700; }
+  ul.dod li.y .mark { color: var(--ok); }
+  ul.dod li.n .mark { color: var(--warn); }
+  ul.dod li.n { color: var(--text-dim); }
+
+  .sample {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.1rem 1.25rem; margin: 1.25rem 0; font-size: .92rem;
+  }
+  .sample .h { font-weight: 600; margin-bottom: .6rem; }
+  .sample .row { margin: .45rem 0; }
+  .sample .arrow { color: var(--text-dim); padding-left: 1.2rem; display: block; }
+  .sample .dis { color: var(--text-dim); font-size: .85rem; margin-top: .8rem; padding-top: .6rem; border-top: 1px dashed var(--border); }
+
+  footer {
+    margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-dim); font-size: .85rem;
+  }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">daily-stock</p>
+  <h1>Roadmap 與 Phase 1 目標</h1>
+  <p class="lede">AI 台股盤後分析研究工具。輸入公開資料（大盤、三大法人籌碼、個股日K）+ 財金新聞，產出<strong>白話解讀 + 術語教學 + 可回測的因子訊號研究</strong>。定位是<strong>理解 + 研究</strong>——訊號來自可回測的規則引擎與真實因子打分，LLM 只負責解讀「為什麼」與教學，不憑空喊單。</p>
+</header>
+
+<div class="callout warn">
+  <span class="label">範圍與定位聲明</span>
+  <p>本專案僅供個人學習與回測研究使用，<strong>不對外提供服務</strong>。所有產出均為研究與教育性質，非投資建議，不構成任何買賣邀約。開發者不對使用本工具所生之投資決策負責。</p>
+</div>
+
+<h2>一、設計原則</h2>
+
+<div class="principles">
+  <div class="principle">
+    <div class="n">1</div>
+    <div>
+      <div class="t">數字防幻覺（輸入端）</div>
+      <div class="d">股價 / EPS / 買賣超一律從 API 取真值餵給 LLM。LLM 只解讀，數字由程式代入模板——想寫錯都寫不了。</div>
+    </div>
+  </div>
+  <div class="principle">
+    <div class="n">2</div>
+    <div>
+      <div class="t">輸出忠實度驗證（輸出端）</div>
+      <div class="d">eval set 檢查解讀是否忠於原始數據。改 prompt、換 provider 必重跑，CI 當 merge gate。</div>
+    </div>
+  </div>
+  <div class="principle">
+    <div class="n">3</div>
+    <div>
+      <div class="t">Provider 可切換</div>
+      <div class="d"><code>llm.Provider</code> 與 <code>embed.EmbeddingProvider</code> 雙介面，Claude / Gemini / 地端 Ollama config 一行切，上層零改動。</div>
+    </div>
+  </div>
+  <div class="principle">
+    <div class="n">4</div>
+    <div>
+      <div class="t">訊號可回測</div>
+      <div class="d">規則要能對歷史資料 walk-forward 回測（避開 look-ahead / survivorship / overfitting），站不住就不出訊號。</div>
+    </div>
+  </div>
+  <div class="principle">
+    <div class="n">5</div>
+    <div>
+      <div class="t">先計劃再動手</div>
+      <div class="d">每個 phase 有獨立 plan doc，看過才實作。</div>
+    </div>
+  </div>
+</div>
+
+<h2>二、架構分層</h2>
+
+<div class="layers">
+  <div class="layer">
+    <div class="name">Ingestion<small>① 抓</small></div>
+    <div class="d">排程爬蟲抓行情 / 籌碼 / 新聞 → Postgres(pgvector) 落地，全自動、冪等</div>
+  </div>
+  <div class="layer">
+    <div class="name">Compute<small>② 算</small></div>
+    <div class="d">技術指標（MA / KD / MACD / RSI）、籌碼因子（連買連賣天數）</div>
+  </div>
+  <div class="layer">
+    <div class="name">Signal<small>③ 判</small></div>
+    <div class="d">因子打分 → 分級 → 候選訊號，須經 walk-forward 回測驗證</div>
+  </div>
+  <div class="layer">
+    <div class="name">LLM<small>④ 解讀</small></div>
+    <div class="d">provider 介面 → 白話解讀 / RAG / agent + eval harness</div>
+  </div>
+  <div class="layer">
+    <div class="name">Deliver<small>⑤ 送</small></div>
+    <div class="d">CLI → 推播 → REST + SSE API → React web dashboard</div>
+  </div>
+</div>
+
+<h2>三、Phase 全貌</h2>
+
+<div class="phases">
+
+  <div class="phase done">
+    <div class="top">
+      <span class="id">Phase 0</span>
+      <span class="title">產品需求規格書（PRD）</span>
+      <span class="badge done">規格完成</span>
+    </div>
+    <div class="d">功能模組 M1–M9、使用者故事、驗收標準、法遵紅線。<strong>產品化情境的規格演練，現階段未對外</strong>；若未來對外需先完成其 §1.1 法遵行動項。</div>
+  </div>
+
+  <div class="phase done">
+    <div class="top">
+      <span class="id">Phase 1</span>
+      <span class="title">盤後白話摘要 MVP + 自動資料管線</span>
+      <span class="badge done">主體完成</span>
+    </div>
+    <div class="d">排程器自動抓 TWSE 大盤 / 三大法人 / 個股日K + 新聞 RSS → 直接落地 Postgres(pgvector)；LLM 白話摘要（模板代入防幻覺）+ 術語註解；provider 可切；eval set。<strong>testcontainers 測試與 README demo 於 Phase 1.5 週 3 收尾。</strong></div>
+  </div>
+
+  <div class="phase now">
+    <div class="top">
+      <span class="id">Phase 1.5</span>
+      <span class="title">自選股每日追蹤（自用版）</span>
+      <span class="badge now">本階段</span>
+    </div>
+    <div class="d">watchlist 持倉 + 個股三大法人（T86）+ 除權息還原 + 描述性統計 + Discord 推播。三週垂直切片。<strong>不出訊號、不做回測。</strong></div>
+  </div>
+
+  <div class="phase hold">
+    <div class="top">
+      <span class="id">Phase 2'</span>
+      <span class="title">回測極簡版（timebox 一週）</span>
+      <span class="badge hold">暫緩</span>
+    </div>
+    <div class="d">單一因子（外資連買天數）+ 固定參數 + walk-forward 跑通一輪。目的是讓「訊號經回測」為真，不是做完整量化平台。暫緩理由與重啟條件見 <code>BACKLOG.md</code>。</div>
+  </div>
+
+  <div class="phase">
+    <div class="top">
+      <span class="id">Phase 3</span>
+      <span class="title">新聞 RAG + 個股問答 agent</span>
+      <span class="badge later">AI 練習主菜</span>
+    </div>
+    <div class="d">新聞 embedding（pgvector）+ hybrid 檢索 + LLM tool-use agent + trace + agent eval。</div>
+  </div>
+
+  <div class="phase">
+    <div class="top">
+      <span class="id">Phase 4</span>
+      <span class="title">Web dashboard + 基本容器化</span>
+      <span class="badge later">未開始</span>
+    </div>
+    <div class="d">Go API（REST + SSE streaming）+ React/TS 前端四頁 + Dockerfile/compose + CI eval gate；雲端部署延後。</div>
+  </div>
+
+  <div class="phase">
+    <div class="top">
+      <span class="id">Phase 2''</span>
+      <span class="title">回測完整版</span>
+      <span class="badge later">想衝量化深度時</span>
+    </div>
+    <div class="d">多因子、調參、交易成本模型、survivorship 處理。</div>
+  </div>
+
+</div>
+
+<div class="callout">
+  <span class="label">順序理由</span>
+  <p>學習目標是 AI 應用（RAG / embedding / agent / eval harness），這些全部在 Phase 3，故升為主菜；Phase 2 是量化工程、AI 含量最低，降為極簡 timebox 版，保住「回測站得住才出訊號」的原則即可。</p>
+  <p><strong>Phase 1.5 插隊的理由</strong>：專案的第一優先已從「求職作品集」改為「自己每天實際使用的工具」。驗收標準隨之從「DoD 打勾」變成「我明天會不會打開它」，最痛的需求變成「我手上這 20 檔今天怎麼了」——而那不在任何既有 phase 裡。回測（2'）與 RAG/agent（3）順序不變，只是往後移。</p>
+</div>
+
+<h2>四、模組</h2>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>package</th><th>職責</th><th>Phase</th></tr></thead>
+  <tbody>
+    <tr><td><code>internal/store</code></td><td>pgx 連線池 + goose migrations + repository（upsert 冪等）</td><td>1</td></tr>
+    <tr><td><code>internal/scheduler</code></td><td>cron 排程 + rediskit lock + 重試</td><td>1</td></tr>
+    <tr><td><code>internal/llm</code></td><td>Provider 介面 + Anthropic / OpenAI-compat adapter + factory</td><td>1</td></tr>
+    <tr><td><code>internal/market</code></td><td>TWSE 爬蟲 Fetcher + mock（查詢一律走 store）</td><td>1</td></tr>
+    <tr><td><code>internal/news</code></td><td>財金新聞抓取 → Phase 3 加 RAG</td><td>1 / 3</td></tr>
+    <tr><td><code>internal/report</code></td><td>組資料 → prompt → LLM → 摘要</td><td>1</td></tr>
+    <tr><td><code>internal/glossary</code></td><td>投資術語辭典 + 自動註解</td><td>1</td></tr>
+    <tr><td><code>internal/eval</code></td><td>LLM 輸出忠實度 eval harness</td><td>1 起</td></tr>
+    <tr><td><code>internal/indicator</code></td><td>描述性統計（MA / 量能比 / 距高低點 / 法人連買連賣）→ 技術指標與因子</td><td>1.5 / 2</td></tr>
+    <tr><td><code>internal/notify</code></td><td>推播通道：Discord webhook；render / sender 分層</td><td>1.5</td></tr>
+    <tr><td><code>internal/signal</code></td><td>因子打分 → 訊號 + walk-forward 回測</td><td>2</td></tr>
+    <tr><td><code>internal/embed</code></td><td>Embedding provider 介面 + Voyage / OpenAI-compat / Ollama</td><td>3</td></tr>
+    <tr><td><code>internal/agent</code></td><td>tool-use agent loop + 工具註冊 + trace</td><td>3</td></tr>
+    <tr><td><code>internal/api</code></td><td>HTTP server：REST + SSE streaming</td><td>4</td></tr>
+    <tr><td><code>web/</code></td><td>React + TypeScript 前端</td><td>4</td></tr>
+    <tr><td><code>cmd/daily-stock</code></td><td>CLI 入口</td><td>1</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>五、資料來源</h2>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>類別</th><th>來源</th><th>Phase</th></tr></thead>
+  <tbody>
+    <tr><td>大盤指數 / 個股日K</td><td>TWSE OpenAPI（免費、盤後）</td><td>1</td></tr>
+    <tr><td>三大法人買賣超（全市場總額）</td><td>TWSE OpenAPI <code>BFI82U</code></td><td>1</td></tr>
+    <tr><td>個股三大法人</td><td>TWSE RWD <code>T86</code></td><td>1.5</td></tr>
+    <tr><td>除權息計算結果</td><td>TWSE RWD <code>TWT49U</code></td><td>1.5</td></tr>
+    <tr><td>財金新聞</td><td>自由時報 / 鉅亨 / 經濟日報 RSS</td><td>1（抓取）／ 3（RAG）</td></tr>
+    <tr><td>融資融券 / 借券 / 財報</td><td>FinMind</td><td>2</td></tr>
+    <tr><td>即時報價</td><td>富果 Fugle / 券商 API</td><td>4</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>六、Phase 1 目標</h2>
+
+<p><strong>全自動資料管線 + LLM 白話摘要</strong>：排程器每日自動抓 TWSE 大盤指數、三大法人買賣超、個股日K 與財金新聞，直接落地 PostgreSQL（不經手動、不落散裝檔案），再由 LLM 生成白話解讀 + 術語註解。<strong>不產生任何買賣訊號。</strong></p>
+
+<p>同時建立三個地基，後面每個 phase 都踩在上面：</p>
+
+<div class="principles">
+  <div class="principle">
+    <div class="n">1</div>
+    <div>
+      <div class="t">Postgres 為唯一真相來源</div>
+      <div class="d">day 1 就用 pgvector image，Phase 3 加向量欄位零遷移；Phase 2 回測直接查歷史表。</div>
+    </div>
+  </div>
+  <div class="principle">
+    <div class="n">2</div>
+    <div>
+      <div class="t">Provider 可切換</div>
+      <div class="d"><code>llm.Provider</code> 介面，Claude / Gemini / Ollama config 一行切。</div>
+    </div>
+  </div>
+  <div class="principle">
+    <div class="n">3</div>
+    <div>
+      <div class="t">輸出忠實度 eval</div>
+      <div class="d">把 LLM 當「不完全可信的元件」來管理的驗證機制。</div>
+    </div>
+  </div>
+</div>
+
+<div class="callout">
+  <span class="label">TWSE OpenAPI 的關鍵現實</span>
+  <p>多數 OpenAPI 端點<strong>只回最新交易日、沒有歷史查詢參數</strong>。所以「每天準時抓、抓了就存」不是優化而是必需——歷史資料是自己日積月累存出來的。這正是 day 1 就上 Postgres 的理由；漏抓一天等於那天要走 backfill 路徑補。</p>
+  <p>（Phase 1.5 補充修正：<code>www.twse.com.tw</code> 的 RWD 端點帶 <code>date</code> 參數<strong>可取歷史</strong>，<code>backfill</code> 走的就是這條路徑。）</p>
+</div>
+
+<h3>產出範例</h3>
+
+<div class="sample">
+  <div class="h">📊 2026-08-07 盤後摘要</div>
+  <div class="row">
+    <strong>大盤</strong>：加權指數收 22,150 點，漲 85 點（+0.39%）
+    <span class="arrow">→ 白話：今天大盤小漲，屬於溫和整理格局，沒有明顯方向性表態。</span>
+  </div>
+  <div class="row">
+    <strong>三大法人</strong>：外資買超 32 億元，投信賣超 5 億元
+    <span class="arrow">→ 白話：外資站買方，是短線偏多的訊號之一，但投信同步賣超，顯示法人對後市看法不完全一致。</span>
+  </div>
+  <div class="row" style="margin-top:.8rem">
+    <strong>【術語小教室】</strong><br>
+    買超／賣超：指法人當日買進金額扣掉賣出金額後的淨額。
+  </div>
+  <div class="dis">⚠️ 以上內容僅供學習與理解市場動態使用，非投資建議。</div>
+</div>
+
+<h3>防幻覺機制：數字不讓 LLM 寫</h3>
+
+<pre><code>LLM 輸出：「外資買超 {foreign_net} 億元，顯示…」   ← 只准寫佔位符
+渲染層：  程式把 pg 查出的真值填進 {foreign_net}    ← 數字永遠是真的
+驗證：    佔位符必須 ∈ 已知欄位集，否則 reject 重生成</code></pre>
+
+<p>模板方案讓「數字錯」被<strong>結構性消滅</strong>，eval 因此只需聚焦剩下兩類問題：<strong>方向曲解</strong>（買超 32 億被解讀成「賣壓沉重」，用 LLM-as-judge + rubric）與<strong>紀律違規</strong>（出現建議性字眼，用黑名單程式斷言）。</p>
+
+<h2>七、Phase 1 完成定義（DoD）</h2>
+
+<ul class="dod">
+  <li class="y"><span class="mark">✓</span><span><code>docker compose up -d</code> 起 pg(pgvector) + redis，healthcheck 過</span></li>
+  <li class="y"><span class="mark">✓</span><span>goose migrations 建齊全部表（含 <code>eval_runs</code> / <code>eval_case_results</code>）</span></li>
+  <li class="y"><span class="mark">✓</span><span><code>daily-stock schedule</code> 長駐：平日 17:30 自動抓、18:30 自動生成摘要、每 30 分鐘抓新聞，全程無手動</span></li>
+  <li class="y"><span class="mark">✓</span><span>冪等：同日重跑 ingest 任意次，各表資料不重複不變質</span></li>
+  <li class="y"><span class="mark">✓</span><span><code>raw_payloads</code> 有原始 payload，<code>daily-stock reparse</code> 可重放解析</span></li>
+  <li class="y"><span class="mark">✓</span><span><code>daily-stock backfill</code> 可回補個股歷史（帶 rate limit）</span></li>
+  <li class="y"><span class="mark">✓</span><span>出站呼叫走 rediskit rate limit；排程 job 有 rediskit lock</span></li>
+  <li class="y"><span class="mark">✓</span><span>摘要走模板代入，數字非 LLM 生成；<code>summaries</code> 落地</span></li>
+  <li class="y"><span class="mark">✓</span><span><code>llm.Provider</code> 跑通（Anthropic / Gemini / Ollama 三個 adapter）</span></li>
+  <li class="y"><span class="mark">✓</span><span>術語教學 ≥ 10 詞彙（目前 12）</span></li>
+  <li class="y"><span class="mark">✓</span><span>eval set ≥ 20 組，<code>daily-stock eval</code> 可重跑，結果落 <code>eval_runs</code></span></li>
+  <li class="n"><span class="mark">○</span><span><code>internal/store</code> testcontainers 整合測試（upsert 冪等、migration 可重放）→ 順延至 Phase 1.5 週 3</span></li>
+  <li class="n"><span class="mark">○</span><span>README 附 demo 輸出與排程 log 截圖 → 順延至 Phase 1.5 週 3</span></li>
+</ul>
+
+<h2>八、風險與紀律</h2>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>面向</th><th>紀律</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>免責</td>
+      <td>所有輸出（含前端每頁）標「非投資建議，僅供理解與學習研究使用」；定位為個人研究工具，不對外提供訊號服務。</td>
+    </tr>
+    <tr>
+      <td>版權</td>
+      <td>新聞優先官方 RSS / API，爬蟲遵守 robots.txt，不整篇轉存展示。</td>
+    </tr>
+    <tr>
+      <td>回測前不出訊號</td>
+      <td>Phase 1 只做白話摘要、Phase 1.5 只做描述性統計；訊號需通過 walk-forward 驗證才納入輸出，且每次顯示「歷史回測不保證未來」。</td>
+    </tr>
+    <tr>
+      <td>對外請求</td>
+      <td>rediskit RateLimiter 包所有 TWSE / RSS 出站呼叫；backfill 尤其要慢——被 ban 整條管線停擺。</td>
+    </tr>
+    <tr>
+      <td>地端模型限制</td>
+      <td>Ollama 在 tool-use（Phase 3）能力較弱，需支援 function calling 的模型（Qwen / Llama 3.1+）或 fallback JSON 模式，品質作為對照組。</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>九、已知限制（誠實揭露）</h2>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>限制</th><th>說明</th></tr></thead>
+  <tbody>
+    <tr><td>系統性風險未納入</td><td>訊號未考慮大盤系統性風險——系統性下跌時個股因子可能全數失真。</td></tr>
+    <tr><td>回測樣本受限</td><td>受限免費 API 的歷史區間，樣本外驗證力有限。</td></tr>
+    <tr><td>survivorship bias</td><td>無歷史成分股資料，以「大型權值股 + 上市年限門檻」折衷並誠實揭露。</td></tr>
+    <tr><td>eval 覆蓋率</td><td>eval set 涵蓋常見情境，非全面驗證。</td></tr>
+    <tr><td>檢索未加 reranker</td><td>現階段資料量不需要。</td></tr>
+  </tbody>
+</table>
+</div>
+
+<footer>
+  <p>daily-stock · Roadmap 與 Phase 1 目標 · 對應文件：<code>docs/ROADMAP.md</code>、<code>docs/phase-1.md</code>、<code>docs/phase-1.5.md</code>、<code>docs/BACKLOG.md</code>。Phase 1 實作現況見 <code>docs/phase-1-report.html</code>。</p>
+  <p>本專案僅供個人學習與回測研究使用，不對外提供服務。所有產出均為研究與教育性質，<strong>非投資建議</strong>，不構成任何買賣邀約。</p>
+</footer>
+
+</div>
+</body>
+</html>

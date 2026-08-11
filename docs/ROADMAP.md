@@ -34,7 +34,8 @@ AI 台股盤後分析工具。輸入台股資料（大盤、三大法人籌碼�
 | `internal/scheduler` | cron 排程 + rediskit lock + 重試（全自動抓取）|
 | `internal/llm` | Provider 介面 + Anthropic / OpenAI-compat adapter + factory |
 | `internal/market` | TWSE 爬蟲 Fetcher + mock（查詢一律走 store）|
-| `internal/indicator` | 技術指標（MA/KD/MACD/RSI）+ 籌碼因子（Phase 2）|
+| `internal/indicator` | 描述性統計（MA/量能比/距高低點/法人連買連賣，Phase 1.5）→ 技術指標 KD/MACD/RSI 與因子（Phase 2）|
+| `internal/notify` | 推播通道：Discord webhook；render（產內容）/ sender（塞進通道限制）分層（Phase 1.5）|
 | `internal/signal` | 因子打分 → 訊號 + 回測（walk-forward，Phase 2）|
 | `internal/eval` | LLM 輸出忠實度 eval harness（Phase 1 起）|
 | `internal/glossary` | 投資術語辭典 + 自動註解 |
@@ -50,13 +51,16 @@ AI 台股盤後分析工具。輸入台股資料（大盤、三大法人籌碼�
 
 | Phase | 目標 | 產出 | 狀態 |
 | --- | --- | --- | --- |
-| **1** | 盤後白話摘要 MVP + 自動資料管線 | 排程器自動抓 TWSE 大盤/三大法人/個股日K + 新聞 RSS → **直接落地 Postgres(pgvector)**；LLM 白話摘要（模板代入防幻覺）+ 術語註解；provider 可切；eval set。compose 起 pg/redis（kafka/ollama 走 profile）| **本階段**，詳見 `phase-1.md` |
-| **2'** | 回測極簡版（timebox 一週）| 單一因子（外資連買天數）+ 固定參數 + walk-forward 跑通一輪。目的是讓「訊號經回測」為真，不是做完整量化平台 | 詳見 `phase-2.md`（只做「極簡版」小節範圍）|
+| **1** | 盤後白話摘要 MVP + 自動資料管線 | 排程器自動抓 TWSE 大盤/三大法人/個股日K + 新聞 RSS → **直接落地 Postgres(pgvector)**；LLM 白話摘要（模板代入防幻覺）+ 術語註解；provider 可切；eval set。compose 起 pg/redis（kafka/ollama 走 profile）| 主體完成；testcontainers 測試與 README demo 於 Phase 1.5 週 3 收尾 |
+| **1.5** | 自選股每日追蹤（自用版）| watchlist 持倉 + 個股法人(T86) + 除權息還原 + 描述性統計 + Discord 推播。**不出訊號、不做回測** | **本階段**，詳見 `phase-1.5.md` |
+| **2'** | 回測極簡版（timebox 一週）| 單一因子（外資連買天數）+ 固定參數 + walk-forward 跑通一輪。目的是讓「訊號經回測」為真，不是做完整量化平台 | 暫緩，見 `BACKLOG.md`；規格見 `phase-2.md`（只做「極簡版」小節範圍）|
 | **3** | 新聞 RAG + 個股問答 agent | 新聞 embedding(pgvector) + hybrid 檢索 + LLM tool-use agent + agent eval | **AI 練習主菜**，詳見 `phase-3.md` |
 | **4** | Web dashboard + 基本容器化 | Go API（REST + SSE streaming）+ React/TS 前端四頁 + Dockerfile/compose + CI eval gate；雲端部署延後 | 詳見 `phase-4.md` |
 | 2'' | 回測完整版 | 多因子、調參、交易成本模型、survivorship 處理 | 想衝量化深度時再回來（`phase-2.md` 完整範圍）|
 
 > **順序理由**：本專案的學習目標是 AI 應用（RAG / embedding / agent / eval harness），這些全部在 Phase 3；Phase 2 是量化工程，AI 含量最低，故降為極簡 timebox 版，保住「回測站得住才出訊號」的原則即可。求職敘事要衝量化深度時再回 2''。
+>
+> **Phase 1.5 插隊的理由**：專案的第一優先已從「求職作品集」改為「自己每天實際使用的工具」（我是真實持股人）。驗收標準隨之從「DoD 打勾」變成「我明天會不會打開它」，最痛的需求變成「我手上這 20 檔今天怎麼了」——而那不在任何既有 phase 裡。決策過程完整記錄於 [phase-1.5.md](phase-1.5.md) §1。回測（2'）與 RAG/agent（3）順序不變，只是往後移。
 
 ## 資料來源
 

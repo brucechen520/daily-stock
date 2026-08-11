@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>daily-stock — Phase 1 完成報告</title>
+<style>
+  :root {
+    --bg: #fbfaf8;
+    --surface: #ffffff;
+    --surface-2: #f4f2ee;
+    --border: #e2ded6;
+    --text: #26231e;
+    --text-dim: #6b655c;
+    --accent: #b8562a;
+    --accent-soft: #f6e9e1;
+    --ok: #2f7d4f;
+    --ok-soft: #e6f2ea;
+    --warn: #9a6b13;
+    --warn-soft: #f8efdb;
+    --code-bg: #f4f2ee;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #171512;
+      --surface: #201d19;
+      --surface-2: #272320;
+      --border: #38332c;
+      --text: #ece7df;
+      --text-dim: #9c948a;
+      --accent: #e08a5c;
+      --accent-soft: #34241b;
+      --ok: #6cc48d;
+      --ok-soft: #1c2b21;
+      --warn: #d9a94a;
+      --warn-soft: #2e2617;
+      --code-bg: #272320;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #171512;
+    --surface: #201d19;
+    --surface-2: #272320;
+    --border: #38332c;
+    --text: #ece7df;
+    --text-dim: #9c948a;
+    --accent: #e08a5c;
+    --accent-soft: #34241b;
+    --ok: #6cc48d;
+    --ok-soft: #1c2b21;
+    --warn: #d9a94a;
+    --warn-soft: #2e2617;
+    --code-bg: #272320;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC",
+                 "PingFang TC", "Microsoft JhengHei", sans-serif;
+    line-height: 1.75;
+    font-size: 16px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 3rem 1.25rem 5rem; }
+
+  header { border-bottom: 2px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2.5rem; }
+  .eyebrow {
+    font-family: var(--mono); font-size: .8rem; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 .5rem;
+  }
+  h1 { font-size: 2rem; line-height: 1.25; margin: 0 0 .6rem; letter-spacing: -.01em; }
+  .lede { color: var(--text-dim); margin: 0; font-size: 1.02rem; }
+
+  h2 {
+    font-size: 1.3rem; margin: 3rem 0 1rem; padding-top: 1.5rem;
+    border-top: 1px solid var(--border); letter-spacing: -.01em;
+  }
+  h2:first-of-type { border-top: none; padding-top: 0; }
+  h3 { font-size: 1.02rem; margin: 2rem 0 .6rem; }
+  p { margin: .8rem 0; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .75rem; margin: 1.5rem 0; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .9rem 1rem; }
+  .stat b { display: block; font-size: 1.5rem; line-height: 1.2; font-family: var(--mono); }
+  .stat span { font-size: .8rem; color: var(--text-dim); }
+
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 1.25rem 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: .92rem; }
+  th, td { text-align: left; padding: .6rem .75rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--surface-2); font-weight: 600; font-size: .85rem; color: var(--text-dim); white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  table code { white-space: nowrap; }
+
+  code {
+    font-family: var(--mono); font-size: .88em;
+    background: var(--code-bg); padding: .12em .4em; border-radius: 4px;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1rem 1.1rem; overflow-x: auto; margin: 1rem 0; line-height: 1.6;
+  }
+  pre code { background: none; padding: 0; font-size: .86rem; }
+
+  .flow { display: flex; flex-direction: column; gap: .5rem; margin: 1.5rem 0; }
+  .flow-step {
+    display: grid; grid-template-columns: 2.2rem 1fr; gap: .9rem; align-items: start;
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: .75rem 1rem;
+  }
+  .flow-step .n {
+    font-family: var(--mono); font-size: .9rem; color: var(--accent);
+    background: var(--accent-soft); border-radius: 6px; text-align: center;
+    padding: .1rem 0; font-weight: 600;
+  }
+  .flow-step .t { font-weight: 600; font-size: .95rem; }
+  .flow-step .d { color: var(--text-dim); font-size: .88rem; }
+
+  .badge {
+    display: inline-block; font-size: .75rem; font-family: var(--mono);
+    padding: .1rem .5rem; border-radius: 999px; white-space: nowrap;
+  }
+  .badge.done { background: var(--ok-soft); color: var(--ok); }
+  .badge.gap  { background: var(--warn-soft); color: var(--warn); }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 3px solid var(--warn); border-radius: 8px;
+    padding: .9rem 1.1rem; margin: 1.25rem 0;
+  }
+  .callout.key { border-left-color: var(--accent); }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .label {
+    font-family: var(--mono); font-size: .75rem; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--warn); display: block; margin-bottom: .3rem;
+  }
+  .callout.key .label { color: var(--accent); }
+
+  ol.steps { padding-left: 0; list-style: none; counter-reset: s; margin: 1.5rem 0; }
+  ol.steps > li { counter-increment: s; margin: 0 0 1.75rem; }
+  ol.steps > li > .head {
+    display: flex; gap: .6rem; align-items: baseline; font-weight: 600; margin-bottom: .4rem;
+  }
+  ol.steps > li > .head::before {
+    content: counter(s); font-family: var(--mono); color: var(--accent);
+    background: var(--accent-soft); border-radius: 6px; padding: .05rem .5rem;
+    font-size: .85rem; flex: none;
+  }
+
+  footer {
+    margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--text-dim); font-size: .85rem;
+  }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">daily-stock · Phase 1</p>
+  <h1>盤後白話摘要 MVP — 完成報告</h1>
+  <p class="lede">自動資料管線（TWSE 行情／三大法人／個股日K／新聞 RSS → Postgres）+ 模板代入防幻覺的 LLM 白話摘要 + 輸出忠實度 eval harness。本階段<strong>不產生任何買賣訊號</strong>。</p>
+</header>
+
+<div class="stats">
+  <div class="stat"><b>7</b><span>CLI 子指令</span></div>
+  <div class="stat"><b>8</b><span>資料表</span></div>
+  <div class="stat"><b>20</b><span>eval golden case</span></div>
+  <div class="stat"><b>12</b><span>術語辭典詞彙</span></div>
+  <div class="stat"><b>3</b><span>LLM provider</span></div>
+  <div class="stat"><b>2,689</b><span>Go 行數</span></div>
+</div>
+
+<h2>一、已完成功能</h2>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>功能</th><th>實作位置</th><th>說明</th><th>狀態</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Postgres + 自動 migration</td>
+      <td><code>store.New</code> → <code>goose.Up</code></td>
+      <td>migrations 以 <code>go:embed</code> 打包進 binary，任何指令啟動時自動建表，無須手動 migrate</td>
+      <td><span class="badge done">完成</span></td>
+    </tr>
+    <tr>
+      <td>抓大盤成交資訊</td>
+      <td>TWSE OpenAPI <code>FMTQIK</code></td>
+      <td>回傳<strong>整月</strong>每日資料 → 漏抓幾天會自動補回</td>
+      <td><span class="badge done">完成</span></td>
+    </tr>
+    <tr>
+      <td>抓三大法人買賣超</td>
+      <td>TWSE OpenAPI <code>BFI82U</code></td>
+      <td>全市場總額（外資／投信／自營商），無個股層級</td>
+      <td><span class="badge done">完成</span></td>
+    </tr>
+    <tr>
+      <td>抓全市場個股日K</td>
+      <td>TWSE OpenAPI <code>STOCK_DAY_ALL</code></td>
+      <td>只回當日，一次全市場 1000+ 檔</td>
+      <td><span class="badge done">完成</span></td>
+    </tr>
+    <tr>
+      <td>個股歷史回補</td>
+      <td>RWD <code>STOCK_DAY</code>，按月分頁</td>
+      <td><code>backfill --symbol 2330 --from 2026-05</code></td>
+      <td><span class="badge done">完成</span></td>
+    </tr>
+    <tr>
+      <td>財金新聞抓取</td>
+      <td>RSS（預設自由時報財經）</td>
+      <td><code>url</code> 唯一鍵去重；<code>ExtractSymbols</code> 抽「台積電(2330)」括號代號</td>
+      <td><span class="badge done">完成</span></td>
+    </tr>
+    <tr>
+      <td>raw + normalized 雙層</td>
+      <td><code>raw_payloads</code> 表</td>
+      <td>原始 payload 全存 → <code>reparse</code> 可重放解析，解析 bug 修完不用重爬</td>
+      <td><span class="badge done">完成</span></td>
+    </tr>
+    <tr>
+      <td>冪等寫入</td>
+      <td>全部 <code>ON CONFLICT DO UPDATE</code></td>
+      <td>同日重跑任意次結果相同——排程重試與手動補抓都安全</td>
+      <td><span class="badge done">完成</span></td>
+    </tr>
+    <tr>
+      <td>LLM 白話摘要</td>
+      <td><code>report.Generate</code></td>
+      <td>模板代入：LLM 只准輸出 <code>{欄位}</code> 佔位符，<strong>一個數字都不准寫</strong></td>
+      <td><span class="badge done">完成</span></td>
+    </tr>
+    <tr>
+      <td>Provider 可切換</td>
+      <td><code>llm.Provider</code> 介面</td>
+      <td>Anthropic ／ Gemini ／ Ollama；Gemini 與 Ollama 共用 OpenAI-compat adapter</td>
+      <td><span class="badge done">完成</span></td>
+    </tr>
+    <tr>
+      <td>術語辭典</td>
+      <td><code>glossary/terms.yaml</code></td>
+      <td>12 詞（DoD 要求 ≥ 10）</td>
+      <td><span class="badge done">完成</span></td>
+    </tr>
+    <tr>
+      <td>eval harness</td>
+      <td><code>eval/cases.yaml</code></td>
+      <td>20 組 golden case，結果落 <code>eval_runs</code> / <code>eval_case_results</code></td>
+      <td><span class="badge done">完成</span></td>
+    </tr>
+    <tr>
+      <td>長駐排程器</td>
+      <td><code>robfig/cron</code>（Asia/Taipei）</td>
+      <td>平日 17:30 ingest（重試 3 次／間隔 10 分）、18:30 summary、每 30 分 news；每個 job 包 redis 分散式鎖</td>
+      <td><span class="badge done">完成</span></td>
+    </tr>
+    <tr>
+      <td>出站速率限制</td>
+      <td>rediskit <code>RateLimiter</code></td>
+      <td>Redis 未設定時降為 no-op（啟動時 log 提示）</td>
+      <td><span class="badge done">完成</span></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>二、資料流</h2>
+
+<div class="flow">
+  <div class="flow-step">
+    <div class="n">1</div>
+    <div>
+      <div class="t">抓取 · <code>internal/market</code> / <code>internal/news</code></div>
+      <div class="d">TWSE OpenAPI 與 RSS。回傳「解析後結構 + 原始 <code>json.RawMessage</code>」兩份。</div>
+    </div>
+  </div>
+  <div class="flow-step">
+    <div class="n">2</div>
+    <div>
+      <div class="t">落地 raw · <code>raw_payloads</code></div>
+      <div class="d">原始 payload 進 JSONB，唯一鍵 <code>(source, endpoint, trade_date)</code>。這是 <code>reparse</code> 能重放的原因。</div>
+    </div>
+  </div>
+  <div class="flow-step">
+    <div class="n">3</div>
+    <div>
+      <div class="t">落地 normalized · <code>market_index_daily</code> / <code>institutional_daily</code> / <code>stock_daily</code> / <code>news</code></div>
+      <div class="d">全部 upsert。查詢端一律讀這裡，不碰爬蟲。</div>
+    </div>
+  </div>
+  <div class="flow-step">
+    <div class="n">4</div>
+    <div>
+      <div class="t">組 Snapshot · <code>internal/report</code></div>
+      <div class="d">從 pg 讀當日大盤與三大法人 → <code>report.Snapshot</code> → <code>Fields()</code> 產出「欄位名 → 真值」對照表。</div>
+    </div>
+  </div>
+  <div class="flow-step">
+    <div class="n">5</div>
+    <div>
+      <div class="t">LLM 產文（只有佔位符）</div>
+      <div class="d">prompt 明令「輸出中不可出現任何阿拉伯數字」，只能用 <code>{欄位名}</code> 引用。</div>
+    </div>
+  </div>
+  <div class="flow-step">
+    <div class="n">6</div>
+    <div>
+      <div class="t">驗證 + 渲染</div>
+      <div class="d"><code>Validate</code> 檢查佔位符 ∈ 允許欄位集，非法即 reject；通過後程式把真值代入 → 數字永遠是真的。</div>
+    </div>
+  </div>
+  <div class="flow-step">
+    <div class="n">7</div>
+    <div>
+      <div class="t">落地 · <code>summaries</code></div>
+      <div class="d">唯一鍵 <code>(trade_date, provider, model)</code>，同時是 eval 的素材庫與 Phase 4 前端的資料來源。</div>
+    </div>
+  </div>
+</div>
+
+<div class="callout key">
+  <span class="label">這個設計的重點</span>
+  <p><strong>數字錯誤被結構性消滅</strong>，而不是靠 prompt 拜託 LLM 不要寫錯。LLM 想寫錯數字都做不到——它根本沒有輸出數字的權限。剩下的風險只有兩類：方向曲解（買超被說成賣壓）與紀律違規（出現建議性字眼），這兩類交給 eval 把關。</p>
+</div>
+
+<h2>三、資料表</h2>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>表</th><th>用途</th><th>冪等鍵</th></tr></thead>
+  <tbody>
+    <tr><td><code>raw_payloads</code></td><td>原始 API 回應（審計 + 重解析）</td><td><code>(source, endpoint, trade_date)</code></td></tr>
+    <tr><td><code>market_index_daily</code></td><td>大盤指數／成交量值</td><td><code>trade_date</code></td></tr>
+    <tr><td><code>institutional_daily</code></td><td>三大法人買賣超（全市場總額）</td><td><code>(trade_date, actor)</code></td></tr>
+    <tr><td><code>stock_daily</code></td><td>個股日K（全市場）</td><td><code>(symbol, trade_date)</code></td></tr>
+    <tr><td><code>news</code></td><td>財金新聞</td><td><code>url</code></td></tr>
+    <tr><td><code>summaries</code></td><td>LLM 摘要產出</td><td><code>(trade_date, provider, model)</code></td></tr>
+    <tr><td><code>eval_runs</code></td><td>eval 執行紀錄與 pass rate</td><td>—</td></tr>
+    <tr><td><code>eval_case_results</code></td><td>逐案結果（FK → <code>eval_runs</code>）</td><td>—</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><code>CREATE EXTENSION vector</code> 已在 <code>001_init.sql</code> 開啟——Phase 3 加向量欄位時零遷移。</p>
+
+<h2>四、CLI 指令</h2>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>指令</th><th>作用</th></tr></thead>
+  <tbody>
+    <tr><td><code>daily-stock schedule</code></td><td>長駐排程（平日 17:30 抓資料、18:30 生成摘要、每 30 分抓新聞）</td></tr>
+    <tr><td><code>daily-stock ingest</code></td><td>手動抓當日市場資料</td></tr>
+    <tr><td><code>daily-stock news</code></td><td>手動抓一輪新聞</td></tr>
+    <tr><td><code>daily-stock backfill --symbol 2330 --from 2026-01 [--to 2026-06]</code></td><td>回補個股歷史（按月分頁）</td></tr>
+    <tr><td><code>daily-stock summary [--date 2026-08-07]</code></td><td>生成／重生成某日摘要（預設 DB 內最新交易日）</td></tr>
+    <tr><td><code>daily-stock eval</code></td><td>跑 golden set，結果落 <code>eval_runs</code></td></tr>
+    <tr><td><code>daily-stock reparse</code></td><td>重放 <code>raw_payloads</code>（解析修復後用，不重爬）</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>五、怎麼測試</h2>
+
+<ol class="steps">
+
+<li>
+  <div class="head">單元測試（不需要 DB 或 API key）</div>
+  <pre><code>go test ./...</code></pre>
+  <p>目前 <code>eval</code> / <code>market</code> / <code>news</code> / <code>report</code> 四包通過。<code>market</code> 的測試特別涵蓋民國年日期解析與非交易日空回應——那是最容易錯的地方。</p>
+</li>
+
+<li>
+  <div class="head">起基礎設施</div>
+  <pre><code>docker compose up -d      # pg(pgvector) + redis
+docker compose ps         # 確認 healthy</code></pre>
+</li>
+
+<li>
+  <div class="head">設定 .env</div>
+  <p>用 Gemini 的話：</p>
+  <pre><code>LLM_PROVIDER=gemini
+GEMINI_API_KEY=&lt;你的 key&gt;
+GEMINI_MODEL=gemini-2.5-flash</code></pre>
+  <p>未設 <code>REDIS_ADDR</code> 也能跑，lock 與 rate limit 會降為 no-op（啟動時會 log 出來）。</p>
+</li>
+
+<li>
+  <div class="head">抓資料並驗證落地</div>
+  <pre><code>go run ./cmd/daily-stock ingest</code></pre>
+  <p>log 應出現 <code>[ingest] market 完成：index=N 日, institutional=true, stocks=NNNN 檔</code>。接著查 DB：</p>
+  <pre><code>docker compose exec db psql -U stock -d stock -c "
+  SELECT trade_date, close, change FROM market_index_daily ORDER BY trade_date DESC LIMIT 5;
+  SELECT * FROM institutional_daily ORDER BY trade_date DESC LIMIT 3;
+  SELECT count(*) FROM stock_daily;"</code></pre>
+  <p>把 <code>close</code> / <code>change</code> 對照 TWSE 官網當日數字——這是驗證解析正確性最直接的方法。</p>
+</li>
+
+<li>
+  <div class="head">驗冪等（Phase 1 的核心承諾）</div>
+  <pre><code>docker compose exec db psql -U stock -d stock -c "SELECT count(*) FROM stock_daily;"
+go run ./cmd/daily-stock ingest      # 再跑一次
+docker compose exec db psql -U stock -d stock -c "SELECT count(*) FROM stock_daily;"</code></pre>
+  <p>兩次 count 必須相同。</p>
+</li>
+
+<li>
+  <div class="head">新聞去重</div>
+  <pre><code>go run ./cmd/daily-stock news    # 第一次：抓 N 則、新增 N 則
+go run ./cmd/daily-stock news    # 第二次：抓 N 則、新增 0 則 ← url 去重生效</code></pre>
+</li>
+
+<li>
+  <div class="head">生成摘要（會呼叫 LLM，燒 token）</div>
+  <pre><code>go run ./cmd/daily-stock summary
+go run ./cmd/daily-stock summary --date 2026-08-07</code></pre>
+  <div class="callout">
+    <span class="label">最重要的驗證</span>
+    <p>輸出裡的<strong>每一個數字</strong>都必須與步驟 4 查到的 DB 值完全一致。任何一個對不上，代表模板代入機制破了——那是 M7 信任防線的核心，比摘要文筆重要得多。</p>
+  </div>
+</li>
+
+<li>
+  <div class="head">reparse 與 backfill</div>
+  <pre><code>go run ./cmd/daily-stock reparse
+go run ./cmd/daily-stock backfill --symbol 2330 --from 2026-05</code></pre>
+  <div class="callout">
+    <span class="label">注意</span>
+    <p>未設 <code>REDIS_ADDR</code> 時 <strong>backfill 沒有 rate limit 保護</strong>。回補大範圍前先把 Redis 設好，否則有被 TWSE 擋的風險——被 ban 整條管線都會停擺。</p>
+  </div>
+</li>
+
+<li>
+  <div class="head">eval</div>
+  <pre><code>go run ./cmd/daily-stock eval</code></pre>
+  <p>逐案印 ✅/❌ 與 pass rate，結果落 <code>eval_runs</code>。20 組都走完整 LLM 呼叫，換 provider 或改 prompt 後要重跑比較。</p>
+</li>
+
+<li>
+  <div class="head">排程</div>
+  <pre><code>go run ./cmd/daily-stock schedule</code></pre>
+  <p>會停在 <code>[schedule] 排程啟動…</code>，但平日 17:30 / 18:30 才觸發，當下只會看到啟動 log 與每 30 分鐘的 news job。想立刻驗證觸發邏輯，把 <code>internal/scheduler/scheduler.go</code> 第 63–64 行的 cron spec 暫時改成 <code>*/2 * * * *</code>，確認 job 有跑、lock 有生效，測完改回來。</p>
+</li>
+
+</ol>
+
+<h2>六、已知落差</h2>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>項目</th><th>說明</th><th>處理</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>internal/store</code> 無測試</td>
+      <td>testcontainers 起真 pg 驗 upsert 冪等與 migration 可重放，是 DoD 項目但尚未實作</td>
+      <td><span class="badge gap">Phase 1.5 週 3</span></td>
+    </tr>
+    <tr>
+      <td>README demo 輸出與排程 log 截圖</td>
+      <td>DoD 項目</td>
+      <td><span class="badge gap">Phase 1.5 週 3</span></td>
+    </tr>
+    <tr>
+      <td>摘要不含個股</td>
+      <td><code>stock_daily</code> 已落地全市場資料，但摘要只涵蓋大盤與法人總額</td>
+      <td><span class="badge gap">Phase 1.5 主題</span></td>
+    </tr>
+    <tr>
+      <td>個股層級三大法人</td>
+      <td>目前只有 <code>BFI82U</code> 全市場總額，個股需 <code>T86</code> 端點</td>
+      <td><span class="badge gap">Phase 1.5 週 2</span></td>
+    </tr>
+    <tr>
+      <td>未還原股價</td>
+      <td>TWSE 回的是未還原價，除權息日會出現假跳空</td>
+      <td><span class="badge gap">Phase 1.5 週 3</span></td>
+    </tr>
+    <tr>
+      <td>Kafka 事件</td>
+      <td><code>ENABLE_KAFKA</code> 已在 config 預留，尚未接線</td>
+      <td><span class="badge gap">Phase 3 才需要</span></td>
+    </tr>
+    <tr>
+      <td>未 commit 的改動</td>
+      <td><code>report.go</code>、<code>report_test.go</code>、<code>store.go</code></td>
+      <td><span class="badge gap">待整理</span></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>七、下一步</h2>
+<p>Phase 1.5 — 自選股每日追蹤（自用版）：watchlist 持倉、個股三大法人（T86）、除權息還原、描述性統計、Discord 推播。三週垂直切片，規格見 <code>docs/phase-1.5.md</code>；暫緩項目與重啟條件見 <code>docs/BACKLOG.md</code>。</p>
+
+<footer>
+  <p>daily-stock · Phase 1 完成報告 · 本專案僅供個人學習與回測研究使用，不對外提供服務。所有產出均為研究與教育性質，<strong>非投資建議</strong>，不構成任何買賣邀約。</p>
+</footer>
+
+</div>
+</body>
+</html>
