@@ -1,7 +1,7 @@
-// Package scheduler 是長駐排程器（docs/phase-1.md §2.3）：
+// Package scheduler 是長駐排程器（docs/phase-1.md §2.3、phase-1.5.md §2.4）：
 //
 //	平日 17:30  ingest market（失敗重試 3 次、間隔 10 分鐘）
-//	平日 18:30  generate summary
+//	平日 18:30  daily digest：生成摘要 + 推播（失敗也會推，見 §4.3）
 //	每 30 分鐘  ingest news
 //
 // 每個 job 都包 rediskit 分散式鎖（多實例防重跑；單機是免費保險）。
@@ -17,9 +17,11 @@ import (
 )
 
 type Jobs struct {
-	IngestMarket    func(ctx context.Context) error
-	GenerateSummary func(ctx context.Context) error
-	IngestNews      func(ctx context.Context) error
+	IngestMarket func(ctx context.Context) error
+	// DailyDigest 生成當日摘要並推播。它自己負責「失敗也要推」，
+	// 所以這裡不重試——重試會讓失敗訊息重複洗頻道。
+	DailyDigest func(ctx context.Context) error
+	IngestNews  func(ctx context.Context) error
 }
 
 type Scheduler struct {
@@ -61,10 +63,10 @@ func (s *Scheduler) Run(ctx context.Context) error {
 
 	// TWSE 盤後資料 ~17:00 完整，17:30 起跑
 	add("30 17 * * 1-5", "ingest-market", 40*time.Minute, 3, s.jobs.IngestMarket)
-	add("30 18 * * 1-5", "generate-summary", 20*time.Minute, 1, s.jobs.GenerateSummary)
+	add("30 18 * * 1-5", "daily-digest", 20*time.Minute, 0, s.jobs.DailyDigest)
 	add("*/30 * * * *", "ingest-news", 10*time.Minute, 0, s.jobs.IngestNews)
 
-	log.Println("[schedule] 排程啟動：market 平日 17:30、summary 平日 18:30、news 每 30 分鐘（Asia/Taipei）")
+	log.Println("[schedule] 排程啟動：market 平日 17:30、digest+推播 平日 18:30、news 每 30 分鐘（Asia/Taipei）")
 	s.cron.Start()
 	<-ctx.Done()
 	stopCtx := s.cron.Stop() // 等進行中的 job 跑完

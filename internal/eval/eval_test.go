@@ -66,6 +66,17 @@ func TestCheck_FailsOnGlobalBlacklistAdvice(t *testing.T) {
 	}
 }
 
+// golden set 每組資料都齊全，聲稱缺資料是紀律違規（不在建議性字眼黑名單裡，要單獨擋）。
+func TestCheck_FailsOnNoDataClaim(t *testing.T) {
+	c := eval.Case{Name: "x"}
+
+	got := eval.Check(c, "外資買超 20.2 億元。今日無相關資料。")
+
+	if got.Passed {
+		t.Error("輸出聲稱資料缺漏應 fail, got pass")
+	}
+}
+
 func TestCheck_PassesNeutralResearchWording(t *testing.T) {
 	c := eval.Case{Name: "x"}
 

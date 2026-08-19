@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Phase 1 — 盤後白話摘要 MVP 完成報告 — daily-stock</title>
+<title>Phase 0 — 產品需求規格書（PRD） — daily-stock</title>
 <style>
 :root {
   --bg:#ffffff; --bg-soft:#f6f8fa; --bg-sink:#eaeef2;
@@ -167,14 +167,14 @@ pre.mermaid svg{max-width:100%;height:auto}
   <aside id="sidebar">
     <div class="brand">
       <div class="kicker">daily-stock</div>
-      <div class="name">Phase 1 — 盤後白話摘要 MVP 完成報告</div>
+      <div class="name">Phase 0 — 產品需求規格書（PRD）</div>
     </div>
     <nav class="doc-switch">
       <a href="../ARCHITECTURE.html" title="架構"><span class="num">00</span><span>架構</span></a>
       <a href="ROADMAP.html" title="daily-stock — 全 Phase Roadmap"><span class="num">01</span><span>全 Phase Roadmap</span></a>
-      <a href="phase-0-prd.html" title="Phase 0 — 產品需求規格書（PRD）"><span class="num">02</span><span>Phase 0 — PRD</span></a>
+      <a class="current" href="phase-0-prd.html" title="Phase 0 — 產品需求規格書（PRD）"><span class="num">02</span><span>Phase 0 — PRD</span></a>
       <a href="phase-1.html" title="Phase 1 — 盤後白話摘要 MVP（自動抓取 + Postgres 落地）"><span class="num">03</span><span>Phase 1 — 盤後白話摘要</span></a>
-      <a class="current" href="phase-1-report.html" title="Phase 1 — 盤後白話摘要 MVP 完成報告"><span class="num">04</span><span>Phase 1 完成報告</span></a>
+      <a href="phase-1-report.html" title="Phase 1 — 盤後白話摘要 MVP 完成報告"><span class="num">04</span><span>Phase 1 完成報告</span></a>
       <a href="phase-1.5.html" title="Phase 1.5 — 自選股每日追蹤（自用版）"><span class="num">05</span><span>Phase 1.5 — 自選股追蹤</span></a>
       <a href="phase-2.html" title="Phase 2 — 技術指標 + 訊號引擎 + 回測方法論"><span class="num">06</span><span>Phase 2 — 訊號與回測</span></a>
       <a href="phase-3.html" title="Phase 3 — 新聞 RAG + 個股問答 Agent"><span class="num">07</span><span>Phase 3 — RAG 與問答</span></a>
@@ -196,235 +196,221 @@ pre.mermaid svg{max-width:100%;height:auto}
 <button id="menu-toggle" aria-label="開關目錄">☰</button>
 
 <script id="md-src" type="text/plain">
-# Phase 1 — 盤後白話摘要 MVP 完成報告
+# Phase 0 — 產品需求規格書（PRD）
 
-> 自動資料管線（TWSE 行情／三大法人／個股日K／新聞 RSS → Postgres）+ 模板代入防幻覺的 LLM 白話摘要 + 輸出忠實度 eval harness。本階段**不產生任何買賣訊號**。
+> 本文件回答 **What & Why**（產品是什麼、為誰、有哪些功能、怎樣算做完）。
+> 工程實作的 **How & When**（技術選型、開發順序）見 [ROADMAP.md](ROADMAP.md) 與各 phase 文件。
+> 產品形態：**面向一般使用者（client）的台股盤後理解與學習產品**（web app + 每日推播）。
 >
-> 本報告是 **Phase 1 交付當下（commit `34a453a`）的凍結快照**，下方統計數字不隨後續 phase 更新。現況請看 [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §6 完成度與 [`phase-1.5.md`](phase-1.5.md) §6 里程碑。
-
-| 指標 | 數字 |
-| --- | --- |
-| CLI 子指令 | 7 |
-| 資料表 | 8 |
-| eval golden case | 20 |
-| 術語辭典詞彙 | 12 |
-| LLM provider | 3 |
-| Go 行數 | 2,689 |
+> 📌 **現狀聲明**：本文件為「產品化情境」下的規格設計演練，**現階段本專案未對外提供服務**，實際定位仍為個人學習與研究工具（見 README）。若未來決定對外，需先完成 §1.1 之法遵行動項並更新全 repo 定位聲明。
 
 ---
 
-## 一、已完成功能
+## 1. 產品定位
 
-| 功能 | 實作位置 | 說明 | 狀態 |
+**一句話**：每天盤後，用白話幫使用者看懂台股今天發生什麼、就地學會投資術語，並提供「算法透明、經過回測」的因子數據研究——一個**教育與資訊整理**產品。
+
+**電梯句（對 client）**：「收盤後 5 分鐘，看懂今天的台股。」
+
+### 1.1 法遵紅線（產品範圍的第一決策，不是附註）
+
+台灣《證券投資信託及顧問法》對「向不特定人提供證券投資建議」有規範。本產品是**對外服務**，因此：
+
+| 內容 | 能不能對 client 提供 | 說明 |
+| --- | --- | --- |
+| 客觀數據彙整（行情/籌碼/新聞）| ✅ 可 | 公開資訊整理 |
+| 白話解讀「發生了什麼現象」 | ✅ 可 | 教育性質，不涉及應否買賣 |
+| 術語教學 | ✅ 可 | 教育性質 |
+| 因子數據與歷史統計展示 | ✅ 可 | 呈現客觀計算結果與回測統計 |
+| **多空分級標籤（偏多/偏空）** | ⚠️ **feature flag，預設關** | 系統性產出方向性標籤給不特定人＝模糊地帶，法遵評估通過前不對 client 開放；期間僅供內部研究 |
+| 個股買賣建議、目標價 | ❌ 永不 | 明確紅線 |
+
+- 全產品所有輸出載明「教育與資訊整理用途，非投資建議」。
+- 問答助手被問「該不該買」一律觸發拒絕模板。
+- **行動項**：正式對外前完成法遵諮詢；在此之前對外版本關閉分級標籤，只展示因子數據。
+
+## 2. 目標使用者與痛點
+
+| Persona | 描述 | 痛點 | 對應模組 |
 | --- | --- | --- | --- |
-| Postgres + 自動 migration | `store.New` → `goose.Up` | migrations 以 `go:embed` 打包進 binary，任何指令啟動時自動建表，無須手動 migrate | ✅ 完成 |
-| 抓大盤成交資訊 | TWSE OpenAPI `FMTQIK` | 回傳**整月**每日資料 → 漏抓幾天會自動補回 | ✅ 完成 |
-| 抓三大法人買賣超 | TWSE OpenAPI `BFI82U` | 全市場總額（外資／投信／自營商），無個股層級 | ✅ 完成 |
-| 抓全市場個股日K | TWSE OpenAPI `STOCK_DAY_ALL` | 只回當日，一次全市場 1000+ 檔 | ✅ 完成 |
-| 個股歷史回補 | RWD `STOCK_DAY`，按月分頁 | `backfill --symbol 2330 --from 2026-05` | ✅ 完成 |
-| 財金新聞抓取 | RSS（預設自由時報財經） | `url` 唯一鍵去重；`ExtractSymbols` 抽「台積電(2330)」括號代號 | ✅ 完成 |
-| raw + normalized 雙層 | `raw_payloads` 表 | 原始 payload 全存 → `reparse` 可重放解析，解析 bug 修完不用重爬 | ✅ 完成 |
-| 冪等寫入 | 全部 `ON CONFLICT DO UPDATE` | 同日重跑任意次結果相同——排程重試與手動補抓都安全 | ✅ 完成 |
-| LLM 白話摘要 | `report.Generate` | 模板代入：LLM 只准輸出 `{欄位}` 佔位符，**一個數字都不准寫** | ✅ 完成 |
-| Provider 可切換 | `llm.Provider` 介面 | Anthropic ／ Gemini ／ Ollama；Gemini 與 Ollama 共用 OpenAI-compat adapter | ✅ 完成 |
-| 術語辭典 | `glossary/terms.yaml` | 12 詞（DoD 要求 ≥ 10） | ✅ 完成 |
-| eval harness | `eval/cases.yaml` | 20 組 golden case，結果落 `eval_runs` / `eval_case_results` | ✅ 完成 |
-| 長駐排程器 | `robfig/cron`（Asia/Taipei） | 平日 17:30 ingest（重試 3 次／間隔 10 分）、18:30 summary、每 30 分 news；每個 job 包 redis 分散式鎖 | ✅ 完成 |
-| 出站速率限制 | rediskit `RateLimiter` | Redis 未設定時降為 no-op（啟動時 log 提示） | ✅ 完成 |
+| **投資新手**（主要）| 剛開始關注台股的上班族/學生，看得懂新聞看不懂術語 | 盤後資訊散落各處；術語密度高，查一個詞斷一次閱讀；不知道每天該看什麼 | M2 M3 M8 |
+| **忙碌上班族**（主要）| 有投資但沒時間盯盤 | 收盤後想快速掌握當天重點與自己關注的股票 | M2 M8 M9 |
+| **自學量化的研究者**（次要）| 想驗證「外資連買會漲」這類說法 | 網路訊號黑箱不可驗證 | M4 M5 |
 
----
+## 3. 非目標（明確不做）
 
-## 二、資料流
+- ❌ 即時報價 / 盤中看盤（定位是「盤後理解」，也避開行情授權費）
+- ❌ 買賣建議、目標價、進出場點位（法遵紅線）
+- ❌ 下單、券商整合
+- ❌ 台股以外市場
+- ❌ 社群功能（留言/追蹤/分享名單）——先做好單人體驗
 
-```mermaid
-flowchart TD
-    A["1. 抓取<br/>internal/market · internal/news"] --> B["2. 落地 raw<br/>raw_payloads (JSONB)"]
-    B --> C["3. 落地 normalized<br/>market_index_daily · institutional_daily<br/>stock_daily · news"]
-    C --> D["4. 組 Snapshot<br/>internal/report"]
-    D --> E["5. LLM 產文<br/>只允許輸出佔位符"]
-    E --> F["6. 驗證 + 渲染<br/>Validate → 代入真值"]
-    F --> G["7. 落地<br/>summaries"]
-    B -. reparse 重放 .-> C
+## 4. 功能模組總覽
+
+```
+client 視角:
+  「幫我收資料」──── M1 市場資料中心（平台底座，client 無感但一切依賴它）
+  「幫我看懂」────── M2 每日盤後解讀 ─┐
+  「幫我學會」────── M3 術語教室       │
+  「幫我研究」────── M4 因子研究室     ├─ M6 Web App（呈現層）
+  「讓我提問」────── M5 個股問答助手   │
+  「記住我關注的」── M8 帳號與自選股 ─┘
+  「主動送到我手上」 M9 每日晨報推播
+  「憑什麼信你」──── M7 信任機制（橫切全部模組）
 ```
 
-1. **抓取** · `internal/market` / `internal/news`
-   TWSE OpenAPI 與 RSS。回傳「解析後結構 + 原始 `json.RawMessage`」兩份。
+| ID | 模組 | client 價值一句話 | 優先級 | 工程 phase | 狀態 |
+| --- | --- | --- | --- | --- | --- |
+| M1 | 市場資料中心 | 資料每天自動到位（平台能力）| **Must** | 1 | 規劃完成 |
+| M2 | 每日盤後解讀 | 5 分鐘白話看懂今天的市場 | **Must** | 1 | 規劃完成 |
+| M3 | 術語教室 | 術語在出現的地方就地學會 | **Must** | 1 | 規劃完成 |
+| M7 | 信任機制 | 數字不造假、有據可查、明示非建議 | **Must** | 1–4 橫切 | 規劃完成 |
+| M6 | Web App | 產品的主要介面 | **Must** | 4 | 規劃完成 |
+| M8 | 帳號與自選股 | 記住我、只給我關心的 | Should | **5（新增）** | **待規劃** |
+| M9 | 每日晨報推播 | 不用打開網站，重點送上門 | Should | **5（新增）** | **待規劃** |
+| M5 | 個股問答助手 | 問個股，附出處回答 | Should | 3 | 規劃完成 |
+| M4 | 因子研究室 | 因子數據透明並經回測（分級標籤法遵後開放）| Could | 2' | 規劃完成 + 法遵待辦 |
 
-2. **落地 raw** · `raw_payloads`
-   原始 payload 進 JSONB，唯一鍵 `(source, endpoint, trade_date)`。這是 `reparse` 能重放的原因。
-
-3. **落地 normalized** · `market_index_daily` / `institutional_daily` / `stock_daily` / `news`
-   全部 upsert。查詢端一律讀這裡，不碰爬蟲。
-
-4. **組 Snapshot** · `internal/report`
-   從 pg 讀當日大盤與三大法人 → `report.Snapshot` → `Fields()` 產出「欄位名 → 真值」對照表。
-
-5. **LLM 產文（只有佔位符）**
-   prompt 明令「輸出中不可出現任何阿拉伯數字」，只能用 `{欄位名}` 引用。
-
-6. **驗證 + 渲染**
-   `Validate` 檢查佔位符 ∈ 允許欄位集，非法即 reject；通過後程式把真值代入 → 數字永遠是真的。
-
-7. **落地** · `summaries`
-   唯一鍵 `(trade_date, provider, model)`，同時是 eval 的素材庫與 Phase 4 前端的資料來源。
-
-> **這個設計的重點**
-> **數字錯誤被結構性消滅**，而不是靠 prompt 拜託 LLM 不要寫錯。LLM 想寫錯數字都做不到——它根本沒有輸出數字的權限。剩下的風險只有兩類：方向曲解（買超被說成賣壓）與紀律違規（出現建議性字眼），這兩類交給 eval 把關。
+> **MVP（首個對外版本）= M1 + M2 + M3 + M6（摘要頁）+ M7**：每天自動產出的白話盤後解讀網頁。M8/M9 是第二版（留存關鍵）。M4 分級與 M5 依法遵與品質成熟度逐步開放。
 
 ---
 
-## 三、資料表
+## 5. 模組規格
 
-| 表 | 用途 | 冪等鍵 |
+### M1 市場資料中心（平台底座）
+
+**目標**：client 零感知，資料每天自動到位；歷史資料日積月累。
+
+| # | 需求 | 驗收標準 |
 | --- | --- | --- |
-| `raw_payloads` | 原始 API 回應（審計 + 重解析） | `(source, endpoint, trade_date)` |
-| `market_index_daily` | 大盤指數／成交量值 | `trade_date` |
-| `institutional_daily` | 三大法人買賣超（全市場總額） | `(trade_date, actor)` |
-| `stock_daily` | 個股日K（全市場） | `(symbol, trade_date)` |
-| `news` | 財金新聞 | `url` |
-| `summaries` | LLM 摘要產出 | `(trade_date, provider, model)` |
-| `eval_runs` | eval 執行紀錄與 pass rate | — |
-| `eval_case_results` | 逐案結果（FK → `eval_runs`） | — |
+| FR-1.1 | 平日盤後自動抓大盤/三大法人/全市場個股日K | 17:30 觸發、18:00 前完成；非交易日自動跳過 |
+| FR-1.2 | 財金新聞自動抓取 | 每 30 分鐘；同篇不重複 |
+| FR-1.3 | 抓取冪等 | 同日重跑任意次資料不重複 |
+| FR-1.4 | 歷史回補 | 可回補指定個股/區間，受限速保護 |
+| FR-1.5 | 失敗可觀察 | 重試 3 次 + 告警 log；資料缺漏隔日可補 |
+| FR-1.6 | 資料延遲承諾 | 對 client 標示資料時間（「資料截至 8/7 收盤」），過期資料不冒充最新 |
 
-`CREATE EXTENSION vector` 已在 `001_init.sql` 開啟——Phase 3 加向量欄位時零遷移。
+### M2 每日盤後解讀
 
----
+**目標**：每天 18:30 前產出 200–300 字白話摘要——產品的每日核心內容。
 
-## 四、CLI 指令
+**使用者故事**：作為新手，我每天收盤後想用一段白話文了解大盤與法人動向，而不是自己解讀一堆數字；作為使用者，我想回看任意日期。
 
-| 指令 | 作用 |
-| --- | --- |
-| `daily-stock schedule` | 長駐排程（平日 17:30 抓資料、18:30 生成摘要、每 30 分抓新聞） |
-| `daily-stock ingest` | 手動抓當日市場資料 |
-| `daily-stock news` | 手動抓一輪新聞 |
-| `daily-stock backfill --symbol 2330 --from 2026-01 [--to 2026-06]` | 回補個股歷史（按月分頁） |
-| `daily-stock summary [--date 2026-08-07]` | 生成／重生成某日摘要（預設 DB 內最新交易日） |
-| `daily-stock eval` | 跑 golden set，結果落 `eval_runs` |
-| `daily-stock reparse` | 重放 `raw_payloads`（解析修復後用，不重爬） |
-
----
-
-## 五、怎麼測試
-
-### 1. 單元測試（不需要 DB 或 API key）
-
-```bash
-go test ./...
-```
-
-目前 `eval` / `market` / `news` / `report` 四包通過。`market` 的測試特別涵蓋民國年日期解析與非交易日空回應——那是最容易錯的地方。
-
-### 2. 起基礎設施
-
-```bash
-docker compose up -d      # pg(pgvector) + redis
-docker compose ps         # 確認 healthy
-```
-
-### 3. 設定 .env
-
-用 Gemini 的話：
-
-```bash
-LLM_PROVIDER=gemini
-GEMINI_API_KEY=<你的 key>
-GEMINI_MODEL=gemini-2.5-flash
-```
-
-未設 `REDIS_ADDR` 也能跑，lock 與 rate limit 會降為 no-op（啟動時會 log 出來）。
-
-### 4. 抓資料並驗證落地
-
-```bash
-go run ./cmd/daily-stock ingest
-```
-
-log 應出現 `[ingest] market 完成：index=N 日, institutional=true, stocks=NNNN 檔`。接著查 DB：
-
-```bash
-docker compose exec db psql -U stock -d stock -c "
-  SELECT trade_date, close, change FROM market_index_daily ORDER BY trade_date DESC LIMIT 5;
-  SELECT * FROM institutional_daily ORDER BY trade_date DESC LIMIT 3;
-  SELECT count(*) FROM stock_daily;"
-```
-
-把 `close` / `change` 對照 TWSE 官網當日數字——這是驗證解析正確性最直接的方法。
-
-### 5. 驗冪等（Phase 1 的核心承諾）
-
-```bash
-docker compose exec db psql -U stock -d stock -c "SELECT count(*) FROM stock_daily;"
-go run ./cmd/daily-stock ingest      # 再跑一次
-docker compose exec db psql -U stock -d stock -c "SELECT count(*) FROM stock_daily;"
-```
-
-兩次 count 必須相同。
-
-### 6. 新聞去重
-
-```bash
-go run ./cmd/daily-stock news    # 第一次：抓 N 則、新增 N 則
-go run ./cmd/daily-stock news    # 第二次：抓 N 則、新增 0 則 ← url 去重生效
-```
-
-### 7. 生成摘要（會呼叫 LLM，燒 token）
-
-```bash
-go run ./cmd/daily-stock summary
-go run ./cmd/daily-stock summary --date 2026-08-07
-```
-
-> **最重要的驗證**
-> 輸出裡的**每一個數字**都必須與步驟 4 查到的 DB 值完全一致。任何一個對不上，代表模板代入機制破了——那是 M7 信任防線的核心，比摘要文筆重要得多。
-
-### 8. reparse 與 backfill
-
-```bash
-go run ./cmd/daily-stock reparse
-go run ./cmd/daily-stock backfill --symbol 2330 --from 2026-05
-```
-
-> **注意**
-> 未設 `REDIS_ADDR` 時 **backfill 沒有 rate limit 保護**。回補大範圍前先把 Redis 設好，否則有被 TWSE 擋的風險——被 ban 整條管線都會停擺。
-
-### 9. eval
-
-```bash
-go run ./cmd/daily-stock eval
-```
-
-逐案印 ✅/❌ 與 pass rate，結果落 `eval_runs`。20 組都走完整 LLM 呼叫，換 provider 或改 prompt 後要重跑比較。
-
-### 10. 排程
-
-```bash
-go run ./cmd/daily-stock schedule
-```
-
-會停在 `[schedule] 排程啟動…`，但平日 17:30 / 18:30 才觸發，當下只會看到啟動 log 與每 30 分鐘的 news job。想立刻驗證觸發邏輯，把 `internal/scheduler/scheduler.go` 第 63–64 行的 cron spec 暫時改成 `*/2 * * * *`，確認 job 有跑、lock 有生效，測完改回來。
-
----
-
-## 六、已知落差
-
-| 項目 | 說明 | 處理 |
+| # | 需求 | 驗收標準 |
 | --- | --- | --- |
-| `internal/store` 無測試 | testcontainers 起真 pg 驗 upsert 冪等與 migration 可重放，是 DoD 項目但尚未實作 | ✅ 已於 Phase 1.5 週 2 前補上 |
-| README demo 輸出與排程 log 截圖 | DoD 項目 | Phase 1.5 週 3 |
-| 摘要不含個股 | `stock_daily` 已落地全市場資料，但摘要只涵蓋大盤與法人總額 | Phase 1.5 主題 |
-| 個股層級三大法人 | 目前只有 `BFI82U` 全市場總額，個股需 `T86` 端點 | Phase 1.5 週 2 |
-| 未還原股價 | TWSE 回的是未還原價，除權息日會出現假跳空 | Phase 1.5 週 3 |
-| Kafka 事件 | `ENABLE_KAFKA` 已在 config 預留，尚未接線 | Phase 3 才需要 |
+| FR-2.1 | 每日自動生成並發布 | 18:30 前上線；涵蓋大盤、三大法人 |
+| FR-2.2 | 數字 100% 來自真實資料 | 程式代入模板，LLM 不生成數字（M7）；抽驗零錯誤 |
+| FR-2.3 | 只解讀現象不給建議 | 建議性字眼出現率 0%（eval 把關）|
+| FR-2.4 | 歷史回看 | 任意日期可查 |
+| FR-2.5 | 免責常駐 | 每則載明教育用途聲明 |
+
+### M3 術語教室
+
+**目標**：術語出現在哪，就在哪學會——產品的「教育」骨幹。
+
+| # | 需求 | 驗收標準 |
+| --- | --- | --- |
+| FR-3.1 | 術語辭典 | 首發 ≥ 10 詞，可持續擴充 |
+| FR-3.2 | 每日摘要內建教學 | 至少 1 個當日數據實際出現的術語 |
+| FR-3.3 | 解釋有據可循 | 以辭典為準，LLM 不自行發明定義 |
+| FR-3.4 | 就地顯示 | 網頁術語 hover 即顯示，不跳頁 |
+| FR-3.5 | 術語頁 | 辭典可瀏覽/搜尋（SEO 與自然流量入口）|
+
+### M4 因子研究室（含法遵 gate）
+
+**目標**：提供「怎麼算的看得見、歷史統計誠實揭露」的因子研究。
+
+| # | 需求 | 驗收標準 |
+| --- | --- | --- |
+| FR-4.1 | 因子計算與展示 | 技術指標 + 籌碼因子，數據與計算方式公開 |
+| FR-4.2 | 因子貢獻可解釋 | 分數附各因子貢獻明細，加總可驗算 |
+| FR-4.3 | 回測誠實呈現 | 勝率、視窗穩定度、vs 大盤、最大回撤 +「歷史不代表未來」每次顯示 |
+| FR-4.4 | **分級標籤 feature flag** | 「偏多/偏空」標籤預設對 client 關閉；法遵評估通過才開。關閉時只展示因子數據與統計 |
+| FR-4.5 | 未過回測不出現 | 未通過 walk-forward 的規則不進任何 client 可見輸出 |
+
+### M5 個股問答助手
+
+**目標**：自然語言問個股，agent 自查資料、附出處回答。
+
+| # | 需求 | 驗收標準 |
+| --- | --- | --- |
+| FR-5.1 | 個股問答 | 自主選工具取數；數字與工具回傳一致（trace 比對）|
+| FR-5.2 | 引用溯源 | 新聞引用附標題/日期/連結且真實存在 |
+| FR-5.3 | 拒答邊界 | 買賣建議類 100% 觸發拒絕模板 |
+| FR-5.4 | 過程透明 | 工具呼叫過程可展開查看（trace 側欄）|
+| FR-5.5 | 誠實查無 | 檢索不到就說查無，不補腦 |
+| FR-5.6 | 用量保護 | 每使用者每日提問上限（成本控制），超限友善提示 |
+
+### M6 Web App
+
+**目標**：產品主介面；桌面優先、行動可用。
+
+| # | 需求 | 驗收標準 |
+| --- | --- | --- |
+| FR-6.1 | 今日摘要頁（首頁）| 走勢圖 + 法人柱狀 + 摘要 + 術語 tooltip + 日期回看；未登入可看（獲客入口）|
+| FR-6.2 | 個股頁 | K 線疊 MA + 因子數據 + 回測統計（分級標籤受 FR-4.4 gate）|
+| FR-6.3 | 對話頁 | 訊息串 + 引用可點 + trace 側欄（登入後可用，FR-5.6 限額）|
+| FR-6.4 | 品質頁 | eval pass rate 與失敗案例公開（M7 可視化，信任賣點）|
+| FR-6.5 | 免責常駐 | 每頁 footer + 內容內，文案後端統一下發 |
+
+### M7 信任機制（橫切）
+
+**目標**：「這個產品知道自己哪裡不可信」——相對一般 AI 產品的核心差異，也是法遵的技術防線。
+
+| # | 需求 | 落在 | 驗收標準 |
+| --- | --- | --- | --- |
+| FR-7.1 | 數字防幻覺 | M2/M5 | 數字由程式代入或工具回傳，LLM 不生成 |
+| FR-7.2 | 輸出忠實度驗證 | M2 | eval set ≥ 20 組；改 prompt 必重跑；低於門檻擋上線 |
+| FR-7.3 | 引用溯源 | M5 | 無法溯源的事實句視為缺陷 |
+| FR-7.4 | 建議黑名單 | M2/M5 | 建議性字眼出現率 0%，上線前自動掃描 |
+| FR-7.5 | 品質公開 | M6 | eval 歷史對 client 公開 |
+| FR-7.6 | 免責與定位 | 全部 | 所有輸出載明教育用途 |
+
+### M8 帳號與自選股（待規劃 → 工程 phase 5）
+
+**目標**：記住使用者、個人化內容——留存的地基。
+
+| # | 需求 | 驗收標準 |
+| --- | --- | --- |
+| FR-8.1 | 註冊/登入 | Email magic link 或 OAuth（Google），不自管密碼 |
+| FR-8.2 | 自選股清單 | 加入/移除個股；摘要與晨報優先呈現自選股 |
+| FR-8.3 | 個人化摘要 | 每日摘要附「你的自選股」段落（同樣走 M7 防線）|
+| FR-8.4 | 資料最小化 | 只收 email；可自行刪除帳號與資料 |
+
+### M9 每日晨報推播（待規劃 → 工程 phase 5）
+
+**目標**：內容主動送達——不依賴使用者記得打開網站。
+
+| # | 需求 | 驗收標準 |
+| --- | --- | --- |
+| FR-9.1 | 每日 email 晨報 | 開盤前送達（如 08:00）；含昨日摘要 + 自選股數據 + 1 個術語 |
+| FR-9.2 | 訂閱管理 | 一鍵退訂；退訂即停 |
+| FR-9.3 | 通道可擴充 | 先 email，LINE Notify 列為後續 |
+| FR-9.4 | 內容同紀律 | 晨報內容過同一套 M7 防線與免責 |
 
 ---
 
-## 七、下一步
+## 6. 成功指標
 
-Phase 1.5 — 自選股每日追蹤（自用版）：watchlist 持倉、個股三大法人（T86）、除權息還原、描述性統計、Discord 推播。三週垂直切片，規格見 `docs/phase-1.5.md`；暫緩項目與重啟條件見 `docs/BACKLOG.md`。
+| 階段 | 指標 | 目標 |
+| --- | --- | --- |
+| MVP 驗證 | 自己 + 5–10 名種子使用者連續 2 週每天打開 | 內容價值的最誠實驗證 |
+| 產品健康 | 摘要準時發布率 | ≥ 99%（18:30 前）|
+| 信任（不可妥協）| 數字錯誤 / 建議性字眼 | = 0（eval + 上線前掃描）|
+| 留存 | 晨報開信率 / 週回訪 | 上線後建 baseline 再訂目標 |
+| 成本 | LLM 成本/使用者/月 | 有量測，問答限額可調 |
 
----
+## 7. 需求 ↔ 工程對照
 
-本專案僅供個人學習與回測研究使用，不對外提供服務。所有產出均為研究與教育性質，**非投資建議**，不構成任何買賣邀約。
+| 模組 | 工程文件 | 備註 |
+| --- | --- | --- |
+| M1 | [phase-1.md](phase-1.md) §1–2 | |
+| M2 M3 | [phase-1.md](phase-1.md) §3 | |
+| M4 | [phase-2.md](phase-2.md) | 分級標籤 feature flag 為新增需求 |
+| M5 | [phase-3.md](phase-3.md) | FR-5.6 限額為新增需求（rediskit RateLimiter）|
+| M6 | [phase-4.md](phase-4.md) | 未登入可看首頁為新增需求 |
+| M7 | phase-1 §3 / phase-3 §5 / phase-4 品質頁 | |
+| **M8 M9** | **phase-5（待撰寫）** | 帳號、自選股、email 晨報；對外部署與 secrets 隨此 phase 一併處理 |
 
 </script>
 

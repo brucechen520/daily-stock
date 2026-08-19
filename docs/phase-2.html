@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Phase 1 — 盤後白話摘要 MVP 完成報告 — daily-stock</title>
+<title>Phase 2 — 技術指標 + 訊號引擎 + 回測方法論 — daily-stock</title>
 <style>
 :root {
   --bg:#ffffff; --bg-soft:#f6f8fa; --bg-sink:#eaeef2;
@@ -167,16 +167,16 @@ pre.mermaid svg{max-width:100%;height:auto}
   <aside id="sidebar">
     <div class="brand">
       <div class="kicker">daily-stock</div>
-      <div class="name">Phase 1 — 盤後白話摘要 MVP 完成報告</div>
+      <div class="name">Phase 2 — 技術指標 + 訊號引擎 + 回測方法論</div>
     </div>
     <nav class="doc-switch">
       <a href="../ARCHITECTURE.html" title="架構"><span class="num">00</span><span>架構</span></a>
       <a href="ROADMAP.html" title="daily-stock — 全 Phase Roadmap"><span class="num">01</span><span>全 Phase Roadmap</span></a>
       <a href="phase-0-prd.html" title="Phase 0 — 產品需求規格書（PRD）"><span class="num">02</span><span>Phase 0 — PRD</span></a>
       <a href="phase-1.html" title="Phase 1 — 盤後白話摘要 MVP（自動抓取 + Postgres 落地）"><span class="num">03</span><span>Phase 1 — 盤後白話摘要</span></a>
-      <a class="current" href="phase-1-report.html" title="Phase 1 — 盤後白話摘要 MVP 完成報告"><span class="num">04</span><span>Phase 1 完成報告</span></a>
+      <a href="phase-1-report.html" title="Phase 1 — 盤後白話摘要 MVP 完成報告"><span class="num">04</span><span>Phase 1 完成報告</span></a>
       <a href="phase-1.5.html" title="Phase 1.5 — 自選股每日追蹤（自用版）"><span class="num">05</span><span>Phase 1.5 — 自選股追蹤</span></a>
-      <a href="phase-2.html" title="Phase 2 — 技術指標 + 訊號引擎 + 回測方法論"><span class="num">06</span><span>Phase 2 — 訊號與回測</span></a>
+      <a class="current" href="phase-2.html" title="Phase 2 — 技術指標 + 訊號引擎 + 回測方法論"><span class="num">06</span><span>Phase 2 — 訊號與回測</span></a>
       <a href="phase-3.html" title="Phase 3 — 新聞 RAG + 個股問答 Agent"><span class="num">07</span><span>Phase 3 — RAG 與問答</span></a>
       <a href="phase-4.html" title="Phase 4 — Web Dashboard（Go API + React/TS 前端）+ 基本容器化"><span class="num">08</span><span>Phase 4 — Web Dashboard</span></a>
       <a href="phase-4-slice.html" title="Phase 4 切片 — 摘要頁（React + TS + Redux + Docker），一週"><span class="num">09</span><span>Phase 4 切片 — 摘要頁</span></a>
@@ -196,235 +196,153 @@ pre.mermaid svg{max-width:100%;height:auto}
 <button id="menu-toggle" aria-label="開關目錄">☰</button>
 
 <script id="md-src" type="text/plain">
-# Phase 1 — 盤後白話摘要 MVP 完成報告
+# Phase 2 — 技術指標 + 訊號引擎 + 回測方法論
 
-> 自動資料管線（TWSE 行情／三大法人／個股日K／新聞 RSS → Postgres）+ 模板代入防幻覺的 LLM 白話摘要 + 輸出忠實度 eval harness。本階段**不產生任何買賣訊號**。
->
-> 本報告是 **Phase 1 交付當下（commit `34a453a`）的凍結快照**，下方統計數字不隨後續 phase 更新。現況請看 [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §6 完成度與 [`phase-1.5.md`](phase-1.5.md) §6 里程碑。
+## 目標
 
-| 指標 | 數字 |
-| --- | --- |
-| CLI 子指令 | 7 |
-| 資料表 | 8 |
-| eval golden case | 20 |
-| 術語辭典詞彙 | 12 |
-| LLM provider | 3 |
-| Go 行數 | 2,689 |
+在 Phase 1 的資料基礎上，加入技術指標計算與籌碼因子，把「因子」組合成「訊號」，並且用嚴謹的回測方法驗證訊號是否真的有效，**回測站不住的規則不進入正式輸出**。
 
----
+這個 phase 是整個專案技術含金量最高的部分，也是面試最容易被深挖的地方，因為「回測方法論嚴不嚴謹」直接反映開發者是不是真的懂金融資料的陷阱，還是只是套個公式跑跑看。
 
-## 一、已完成功能
+## 子模組拆解
 
-| 功能 | 實作位置 | 說明 | 狀態 |
-| --- | --- | --- | --- |
-| Postgres + 自動 migration | `store.New` → `goose.Up` | migrations 以 `go:embed` 打包進 binary，任何指令啟動時自動建表，無須手動 migrate | ✅ 完成 |
-| 抓大盤成交資訊 | TWSE OpenAPI `FMTQIK` | 回傳**整月**每日資料 → 漏抓幾天會自動補回 | ✅ 完成 |
-| 抓三大法人買賣超 | TWSE OpenAPI `BFI82U` | 全市場總額（外資／投信／自營商），無個股層級 | ✅ 完成 |
-| 抓全市場個股日K | TWSE OpenAPI `STOCK_DAY_ALL` | 只回當日，一次全市場 1000+ 檔 | ✅ 完成 |
-| 個股歷史回補 | RWD `STOCK_DAY`，按月分頁 | `backfill --symbol 2330 --from 2026-05` | ✅ 完成 |
-| 財金新聞抓取 | RSS（預設自由時報財經） | `url` 唯一鍵去重；`ExtractSymbols` 抽「台積電(2330)」括號代號 | ✅ 完成 |
-| raw + normalized 雙層 | `raw_payloads` 表 | 原始 payload 全存 → `reparse` 可重放解析，解析 bug 修完不用重爬 | ✅ 完成 |
-| 冪等寫入 | 全部 `ON CONFLICT DO UPDATE` | 同日重跑任意次結果相同——排程重試與手動補抓都安全 | ✅ 完成 |
-| LLM 白話摘要 | `report.Generate` | 模板代入：LLM 只准輸出 `{欄位}` 佔位符，**一個數字都不准寫** | ✅ 完成 |
-| Provider 可切換 | `llm.Provider` 介面 | Anthropic ／ Gemini ／ Ollama；Gemini 與 Ollama 共用 OpenAI-compat adapter | ✅ 完成 |
-| 術語辭典 | `glossary/terms.yaml` | 12 詞（DoD 要求 ≥ 10） | ✅ 完成 |
-| eval harness | `eval/cases.yaml` | 20 組 golden case，結果落 `eval_runs` / `eval_case_results` | ✅ 完成 |
-| 長駐排程器 | `robfig/cron`（Asia/Taipei） | 平日 17:30 ingest（重試 3 次／間隔 10 分）、18:30 summary、每 30 分 news；每個 job 包 redis 分散式鎖 | ✅ 完成 |
-| 出站速率限制 | rediskit `RateLimiter` | Redis 未設定時降為 no-op（啟動時 log 提示） | ✅ 完成 |
+### 1. `internal/indicator` — 技術指標與籌碼因子
 
----
+**技術指標**（皆為公開公式，注意計算視窗要對齊實際交易日，不是自然日）：
+- MA（移動平均線）：5日、20日、60日
+- KD：RSV → K → D 的遞迴計算，注意第一筆資料的初始值處理（通常設 50）
+- MACD：EMA12、EMA26、DIF、MACD 訊號線
+- RSI：14日為主流參數
 
-## 二、資料流
+**籌碼因子**（這部分是這個專案的差異化重點，比純技術指標更少人做）：
+- 外資連買/連賣天數
+- 三大法人買賣超金額的 N 日移動平均（避免單日雜訊）
+- 買賣超金額 / 成交量比值（衡量法人動作相對於市場熱度的強度）
 
-```mermaid
-flowchart TD
-    A["1. 抓取<br/>internal/market · internal/news"] --> B["2. 落地 raw<br/>raw_payloads (JSONB)"]
-    B --> C["3. 落地 normalized<br/>market_index_daily · institutional_daily<br/>stock_daily · news"]
-    C --> D["4. 組 Snapshot<br/>internal/report"]
-    D --> E["5. LLM 產文<br/>只允許輸出佔位符"]
-    E --> F["6. 驗證 + 渲染<br/>Validate → 代入真值"]
-    F --> G["7. 落地<br/>summaries"]
-    B -. reparse 重放 .-> C
+```go
+type Factor struct {
+    Name  string
+    Value float64
+    // 因子計算當下所用到的資料截止時間，用於後續防止 look-ahead
+    AsOfDate time.Time
+}
 ```
 
-1. **抓取** · `internal/market` / `internal/news`
-   TWSE OpenAPI 與 RSS。回傳「解析後結構 + 原始 `json.RawMessage`」兩份。
+### 2. `internal/signal` — 因子打分與訊號分級
 
-2. **落地 raw** · `raw_payloads`
-   原始 payload 進 JSONB，唯一鍵 `(source, endpoint, trade_date)`。這是 `reparse` 能重放的原因。
+簡單線性加權開始（之後可以換成更複雜的模型，但初版建議先用可解釋的規則）：
 
-3. **落地 normalized** · `market_index_daily` / `institutional_daily` / `stock_daily` / `news`
-   全部 upsert。查詢端一律讀這裡，不碰爬蟲。
-
-4. **組 Snapshot** · `internal/report`
-   從 pg 讀當日大盤與三大法人 → `report.Snapshot` → `Fields()` 產出「欄位名 → 真值」對照表。
-
-5. **LLM 產文（只有佔位符）**
-   prompt 明令「輸出中不可出現任何阿拉伯數字」，只能用 `{欄位名}` 引用。
-
-6. **驗證 + 渲染**
-   `Validate` 檢查佔位符 ∈ 允許欄位集，非法即 reject；通過後程式把真值代入 → 數字永遠是真的。
-
-7. **落地** · `summaries`
-   唯一鍵 `(trade_date, provider, model)`，同時是 eval 的素材庫與 Phase 4 前端的資料來源。
-
-> **這個設計的重點**
-> **數字錯誤被結構性消滅**，而不是靠 prompt 拜託 LLM 不要寫錯。LLM 想寫錯數字都做不到——它根本沒有輸出數字的權限。剩下的風險只有兩類：方向曲解（買超被說成賣壓）與紀律違規（出現建議性字眼），這兩類交給 eval 把關。
-
----
-
-## 三、資料表
-
-| 表 | 用途 | 冪等鍵 |
-| --- | --- | --- |
-| `raw_payloads` | 原始 API 回應（審計 + 重解析） | `(source, endpoint, trade_date)` |
-| `market_index_daily` | 大盤指數／成交量值 | `trade_date` |
-| `institutional_daily` | 三大法人買賣超（全市場總額） | `(trade_date, actor)` |
-| `stock_daily` | 個股日K（全市場） | `(symbol, trade_date)` |
-| `news` | 財金新聞 | `url` |
-| `summaries` | LLM 摘要產出 | `(trade_date, provider, model)` |
-| `eval_runs` | eval 執行紀錄與 pass rate | — |
-| `eval_case_results` | 逐案結果（FK → `eval_runs`） | — |
-
-`CREATE EXTENSION vector` 已在 `001_init.sql` 開啟——Phase 3 加向量欄位時零遷移。
-
----
-
-## 四、CLI 指令
-
-| 指令 | 作用 |
-| --- | --- |
-| `daily-stock schedule` | 長駐排程（平日 17:30 抓資料、18:30 生成摘要、每 30 分抓新聞） |
-| `daily-stock ingest` | 手動抓當日市場資料 |
-| `daily-stock news` | 手動抓一輪新聞 |
-| `daily-stock backfill --symbol 2330 --from 2026-01 [--to 2026-06]` | 回補個股歷史（按月分頁） |
-| `daily-stock summary [--date 2026-08-07]` | 生成／重生成某日摘要（預設 DB 內最新交易日） |
-| `daily-stock eval` | 跑 golden set，結果落 `eval_runs` |
-| `daily-stock reparse` | 重放 `raw_payloads`（解析修復後用，不重爬） |
-
----
-
-## 五、怎麼測試
-
-### 1. 單元測試（不需要 DB 或 API key）
-
-```bash
-go test ./...
+```go
+type SignalScore struct {
+    Symbol string
+    Score  float64 // -100 ~ 100，負值偏空，正值偏多
+    Factors map[string]float64 // 各因子貢獻分數，方便解釋
+}
 ```
 
-目前 `eval` / `market` / `news` / `report` 四包通過。`market` 的測試特別涵蓋民國年日期解析與非交易日空回應——那是最容易錯的地方。
+**訊號分級範例**：
+| Score 範圍 | 分級 | 意義 |
+|---|---|---|
+| 60~100 | 強勢偏多 | 多項因子同時偏多 |
+| 20~59 | 溫和偏多 | 部分因子偏多 |
+| -19~19 | 中性 | 無明顯方向 |
+| -59~-20 | 溫和偏空 | 部分因子偏空 |
+| -100~-60 | 強勢偏空 | 多項因子同時偏空 |
 
-### 2. 起基礎設施
+**重要**：分數與分級只是「研究產出」，不是「買賣建議」。LLM 在 Phase 1 建立的紀律要延續——輸出時一律用「訊號研究」、「因子分析」等中性詞彙。
 
-```bash
-docker compose up -d      # pg(pgvector) + redis
-docker compose ps         # 確認 healthy
+## 回測方法論（核心）
+
+這部分決定整個訊號系統可不可信，逐一說明常見陷阱與對應做法。
+
+### 陷阱 1：Look-ahead Bias（用到未來資訊）
+
+**問題**：例如財報因子，如果用「財報所屬季度」去對應交易日，會不小心用到「還沒公布」的資訊。Q2 財報通常 8 月中才公布，但如果程式邏輯用「Q2 資料」去算 7 月的訊號，就是用了未來才存在的資訊。
+
+**解法**：
+- 每個因子都要記錄「實際公開時間」（`AsOfDate`），而不是「所屬期間」
+- 回測時嚴格用「訊號產生當下，這筆資料是否已公開」做過濾
+- 建議寫一個 `AssertNoLookAhead()` 檢查函式，在回測跑之前先驗證資料時間軸邏輯正確
+
+```go
+// 錯誤示範：用財報所屬季度去對應價格資料
+// 正確：用財報「公布日」去對應，公布日之後才能用於當天訊號計算
+if factor.PublishDate.After(signalDate) {
+    return errors.New("look-ahead detected: factor published after signal date")
+}
 ```
 
-### 3. 設定 .env
+### 陷阱 2：Survivorship Bias（倖存者偏差）
 
-用 Gemini 的話：
+**問題**：如果回測股票池只包含「現在還在市場上的公司」，會漏掉已下市（下市通常代表經營不善或財務問題）的公司，導致回測勝率被高估。
 
-```bash
-LLM_PROVIDER=gemini
-GEMINI_API_KEY=<你的 key>
-GEMINI_MODEL=gemini-2.5-flash
+**解法**：
+- 理想情況：用「回測當時的完整股票池」（含後來下市的公司），但這需要歷史成分股資料，免費資料源通常拿不到，這是已知限制
+- 折衷做法：至少在文件中誠實揭露這個限制，並且優先選擇「大型權值股」或「上市滿一定年限」的股票池，降低下市機率對結果的扭曲程度
+- 這個限制建議直接寫進 README 的 Known Limitations，不要隱藏
+
+### 陷阱 3：Overfitting（過度擬合歷史資料）
+
+**問題**：如果反覆調整因子權重、參數，直到歷史資料勝率好看為止，這組參數在樣本外（未來）大概率會失效，因為你等於是在「背答案」而不是「找規律」。
+
+**解法：Walk-forward 驗證**
+
+不要用「全部歷史資料調參 → 全部歷史資料測試」這種同一份資料訓練又測試的做法。改用滾動視窗：
+
+```
+時間軸: |----訓練期----|--測試期--|
+                |----訓練期----|--測試期--|
+                        |----訓練期----|--測試期--|
 ```
 
-未設 `REDIS_ADDR` 也能跑，lock 與 rate limit 會降為 no-op（啟動時會 log 出來）。
+具體做法：
+1. 把歷史資料切成多個滾動視窗，例如訓練期 12 個月、測試期 3 個月
+2. 只用訓練期資料決定因子權重/參數
+3. 用「沒看過」的測試期資料驗證勝率
+4. 往前滾動視窗，重複這個過程，把每一段測試期的結果串起來看整體穩定度
 
-### 4. 抓資料並驗證落地
+**驗證指標**（不是只看單一勝率數字）：
+- 各個滾動視窗的勝率是否穩定（如果第一段 70% 第二段 30%，代表規則不穩定，很可能是巧合）
+- 與「隨機買進」或「持有大盤」的 baseline 比較，訊號要顯著優於隨機才有意義
+- 最大回撤（Max Drawdown）：不是只看平均報酬，要看最壞情況會虧多少
 
-```bash
-go run ./cmd/daily-stock ingest
+```go
+type BacktestResult struct {
+    WindowResults []WindowResult
+    OverallWinRate float64
+    WinRateStdDev  float64 // 各視窗勝率的標準差，越小代表越穩定
+    BaselineComparison float64 // 相對於持有大盤的超額表現
+    MaxDrawdown float64
+}
 ```
 
-log 應出現 `[ingest] market 完成：index=N 日, institutional=true, stocks=NNNN 檔`。接著查 DB：
+### 陷阱 4：交易成本被忽略
 
-```bash
-docker compose exec db psql -U stock -d stock -c "
-  SELECT trade_date, close, change FROM market_index_daily ORDER BY trade_date DESC LIMIT 5;
-  SELECT * FROM institutional_daily ORDER BY trade_date DESC LIMIT 3;
-  SELECT count(*) FROM stock_daily;"
-```
+**問題**：回測常見錯誤是假設「買進賣出零成本」，但實際上手續費、證交稅（賣出 0.3%）會吃掉不少報酬，尤其是短線頻繁交易的規則。
 
-把 `close` / `change` 對照 TWSE 官網當日數字——這是驗證解析正確性最直接的方法。
+**解法**：回測時內建基本交易成本假設（例如來回成本抓 0.4-0.5%），沒扣成本的勝率不能當作最終結論，只能當參考。
 
-### 5. 驗冪等（Phase 1 的核心承諾）
+## 回測結果呈現原則
 
-```bash
-docker compose exec db psql -U stock -d stock -c "SELECT count(*) FROM stock_daily;"
-go run ./cmd/daily-stock ingest      # 再跑一次
-docker compose exec db psql -U stock -d stock -c "SELECT count(*) FROM stock_daily;"
-```
+- 訊號只有在通過 walk-forward 驗證、且勝率穩定顯著優於 baseline 時，才進入 Phase 1 的白話摘要輸出中
+- 每個訊號附帶「回測基礎」的說明，例如：「此訊號基於過去 24 個月滾動回測，平均勝率 XX%，相對於持有大盤超額 XX%」，讓使用者知道這不是憑空生成的
+- **誠實揭露**：回測是歷史資料驗證，不保證未來表現，這句話要出現在每次輸出訊號的地方，不能只寫在 README 裡
 
-兩次 count 必須相同。
+## `internal/signal` 測試策略
 
-### 6. 新聞去重
+- 用一組已知答案的假資料測試因子計算邏輯（例如手算 MA5 對答案）
+- 針對 look-ahead 檢查邏輯寫專門的測試案例（故意塞入未來資料，驗證系統會擋下來）
+- Walk-forward 切分邏輯要測試視窗邊界正確，不會重疊或漏掉交易日
 
-```bash
-go run ./cmd/daily-stock news    # 第一次：抓 N 則、新增 N 則
-go run ./cmd/daily-stock news    # 第二次：抓 N 則、新增 0 則 ← url 去重生效
-```
+## Phase 2 完成的定義（Definition of Done）
 
-### 7. 生成摘要（會呼叫 LLM，燒 token）
-
-```bash
-go run ./cmd/daily-stock summary
-go run ./cmd/daily-stock summary --date 2026-08-07
-```
-
-> **最重要的驗證**
-> 輸出裡的**每一個數字**都必須與步驟 4 查到的 DB 值完全一致。任何一個對不上，代表模板代入機制破了——那是 M7 信任防線的核心，比摘要文筆重要得多。
-
-### 8. reparse 與 backfill
-
-```bash
-go run ./cmd/daily-stock reparse
-go run ./cmd/daily-stock backfill --symbol 2330 --from 2026-05
-```
-
-> **注意**
-> 未設 `REDIS_ADDR` 時 **backfill 沒有 rate limit 保護**。回補大範圍前先把 Redis 設好，否則有被 TWSE 擋的風險——被 ban 整條管線都會停擺。
-
-### 9. eval
-
-```bash
-go run ./cmd/daily-stock eval
-```
-
-逐案印 ✅/❌ 與 pass rate，結果落 `eval_runs`。20 組都走完整 LLM 呼叫，換 provider 或改 prompt 後要重跑比較。
-
-### 10. 排程
-
-```bash
-go run ./cmd/daily-stock schedule
-```
-
-會停在 `[schedule] 排程啟動…`，但平日 17:30 / 18:30 才觸發，當下只會看到啟動 log 與每 30 分鐘的 news job。想立刻驗證觸發邏輯，把 `internal/scheduler/scheduler.go` 第 63–64 行的 cron spec 暫時改成 `*/2 * * * *`，確認 job 有跑、lock 有生效，測完改回來。
-
----
-
-## 六、已知落差
-
-| 項目 | 說明 | 處理 |
-| --- | --- | --- |
-| `internal/store` 無測試 | testcontainers 起真 pg 驗 upsert 冪等與 migration 可重放，是 DoD 項目但尚未實作 | ✅ 已於 Phase 1.5 週 2 前補上 |
-| README demo 輸出與排程 log 截圖 | DoD 項目 | Phase 1.5 週 3 |
-| 摘要不含個股 | `stock_daily` 已落地全市場資料，但摘要只涵蓋大盤與法人總額 | Phase 1.5 主題 |
-| 個股層級三大法人 | 目前只有 `BFI82U` 全市場總額，個股需 `T86` 端點 | Phase 1.5 週 2 |
-| 未還原股價 | TWSE 回的是未還原價，除權息日會出現假跳空 | Phase 1.5 週 3 |
-| Kafka 事件 | `ENABLE_KAFKA` 已在 config 預留，尚未接線 | Phase 3 才需要 |
-
----
-
-## 七、下一步
-
-Phase 1.5 — 自選股每日追蹤（自用版）：watchlist 持倉、個股三大法人（T86）、除權息還原、描述性統計、Discord 推播。三週垂直切片，規格見 `docs/phase-1.5.md`；暫緩項目與重啟條件見 `docs/BACKLOG.md`。
-
----
-
-本專案僅供個人學習與回測研究使用，不對外提供服務。所有產出均為研究與教育性質，**非投資建議**，不構成任何買賣邀約。
+- [ ] MA / KD / MACD / RSI 計算完成並有單元測試驗證正確性
+- [ ] 籌碼因子（連買連賣天數、N 日均買賣超）計算完成
+- [ ] 因子打分與訊號分級邏輯完成
+- [ ] Walk-forward 回測框架完成，可產出多視窗勝率與穩定度指標
+- [ ] 回測結果附交易成本假設與 baseline 比較
+- [ ] 至少一組訊號規則通過 walk-forward 驗證並記錄下來（即使勝率普通，誠實記錄也是有價值的產出）
+- [ ] README / demo 附上回測結果圖表（勝率隨時間變化、與 baseline 比較）
 
 </script>
 

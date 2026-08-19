@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/brucechen520/daily-stock/internal/llm"
 	"github.com/brucechen520/daily-stock/internal/report"
@@ -66,11 +67,37 @@ func TestValidate_RejectsLiteralDigits(t *testing.T) {
 	}
 }
 
+// 錯誤片段必須是合法 UTF-8——它會被寫進 eval_case_results，pg 拒收無效序列。
+func TestValidate_ErrorSnippetIsValidUTF8(t *testing.T) {
+	text := "外資大舉買超200億元，投信同步跟進形成多方共識"
+
+	err := report.Validate(text, snap().Fields())
+
+	if err == nil {
+		t.Fatal("含數字應回錯誤")
+	}
+	if !utf8.ValidString(err.Error()) {
+		t.Errorf("錯誤訊息含無效 UTF-8 序列: %q", err.Error())
+	}
+}
+
 func TestValidate_RejectsFullWidthDigits(t *testing.T) {
 	err := report.Validate("大盤上漲２００點", snap().Fields())
 
 	if err == nil {
 		t.Error("Validate(全形數字) = nil, want 錯誤")
+	}
+}
+
+// Fields() 永遠產出完整欄位，所以 LLM 沒有任何理由說資料缺漏。
+// 真實案例：地端 qwen2.5:7b 在三項數據都齊全時插入「今日無相關資料」。
+func TestValidate_RejectsNoDataClaim(t *testing.T) {
+	text := "外資{foreign_net_desc}，投信{trust_net_desc}。今日無相關資料。"
+
+	err := report.Validate(text, snap().Fields())
+
+	if err == nil {
+		t.Error("Validate(聲稱資料缺漏) = nil, want 錯誤")
 	}
 }
 
@@ -112,11 +139,11 @@ func TestGenerate_ProducesRenderedSummaryWithGlossaryAndDisclaimer(t *testing.T)
 		t.Fatalf("Generate 回傳非預期錯誤: %v", err)
 	}
 	for _, want := range []string{
-		"44,396.70",      // 真值已代入
+		"44,396.70",  // 真值已代入
 		"買超 20.2 億元", // 外資
-		"【術語小教室】", // deterministic 附加
-		"非投資建議",     // 免責
-		"2026-08-06",     // 日期
+		"【術語小教室】",    // deterministic 附加
+		"非投資建議",      // 免責
+		"2026-08-06", // 日期
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("輸出缺少 %q。完整輸出：\n%s", want, out)

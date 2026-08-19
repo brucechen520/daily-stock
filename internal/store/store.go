@@ -206,6 +206,91 @@ func (s *Store) UpsertStockDaily(ctx context.Context, rows []StockDaily) error {
 	return nil
 }
 
+// RecentStockDaily 取每檔最近 limit 個交易日的K（由新到舊）。
+// 一次查完整批 watchlist，避免 N 檔打 N 次 DB。
+func (s *Store) RecentStockDaily(ctx context.Context, symbols []string, asOf time.Time, limit int) (map[string][]StockDaily, error) {
+	out := make(map[string][]StockDaily, len(symbols))
+	if len(symbols) == 0 {
+		return out, nil
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT symbol, name, trade_date, open, high, low, close, volume
+		FROM (
+			SELECT symbol, name, trade_date, open, high, low, close, volume,
+			       row_number() OVER (PARTITION BY symbol ORDER BY trade_date DESC) AS rn
+			FROM stock_daily
+			WHERE symbol = ANY($1) AND trade_date <= $2
+		) t
+		WHERE rn <= $3
+		ORDER BY symbol, trade_date DESC`, symbols, asOf, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var r StockDaily
+		if err := rows.Scan(&r.Symbol, &r.Name, &r.TradeDate, &r.Open, &r.High, &r.Low, &r.Close, &r.Volume); err != nil {
+			return nil, err
+		}
+		out[r.Symbol] = append(out[r.Symbol], r)
+	}
+	return out, rows.Err()
+}
+
+// ---------- watchlist / 持倉 ----------
+
+// WatchItem 是一筆自選股。Shares = 0 代表只觀察不持有。
+// AvgCost / BoughtAt 是敏感資料，只用於算報酬率，**不得進入 LLM prompt**
+// （docs/phase-1.5.md §5.3）。
+type WatchItem struct {
+	Symbol   string
+	Shares   int64
+	AvgCost  *float64
+	BoughtAt *time.Time
+	Note     string
+}
+
+// ListWatchlist 依代號排序回傳整份清單（digest 每天推播都會呼叫一次）。
+func (s *Store) ListWatchlist(ctx context.Context) ([]WatchItem, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT symbol, shares, avg_cost, bought_at, note FROM watchlist ORDER BY symbol`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []WatchItem
+	for rows.Next() {
+		var w WatchItem
+		if err := rows.Scan(&w.Symbol, &w.Shares, &w.AvgCost, &w.BoughtAt, &w.Note); err != nil {
+			return nil, err
+		}
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}
+
+// UpsertWatch 冪等寫入一檔——CSV/SQL seed 重跑任意次結果相同，
+// 改持股就是改檔案重跑，不必先刪再加。
+func (s *Store) UpsertWatch(ctx context.Context, w WatchItem) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO watchlist (symbol, shares, avg_cost, bought_at, note)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (symbol)
+		DO UPDATE SET shares = EXCLUDED.shares, avg_cost = EXCLUDED.avg_cost,
+		              bought_at = EXCLUDED.bought_at, note = EXCLUDED.note`,
+		w.Symbol, w.Shares, w.AvgCost, w.BoughtAt, w.Note)
+	return err
+}
+
+// RemoveWatch 回傳是否真的刪到（沒刪到代表本來就不在清單裡，不是錯誤）。
+func (s *Store) RemoveWatch(ctx context.Context, symbol string) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM watchlist WHERE symbol = $1`, symbol)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 // ---------- 新聞 ----------
 
 type NewsItem struct {
@@ -269,6 +354,8 @@ type EvalCaseResult struct {
 	Detail   string
 }
 
+// SaveEvalRun 以單一 transaction 寫入 run + 全部 case 明細——
+// 任一筆失敗整包回滾，不留「有 header 沒明細」的半套資料。
 func (s *Store) SaveEvalRun(ctx context.Context, provider, model string, results []EvalCaseResult) (int64, error) {
 	passed := 0
 	for _, r := range results {
@@ -276,8 +363,14 @@ func (s *Store) SaveEvalRun(ctx context.Context, provider, model string, results
 			passed++
 		}
 	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // commit 成功後 rollback 是 no-op
+
 	var runID int64
-	err := s.pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		INSERT INTO eval_runs (provider, model, total, passed)
 		VALUES ($1, $2, $3, $4) RETURNING id`,
 		provider, model, len(results), passed).Scan(&runID)
@@ -285,11 +378,14 @@ func (s *Store) SaveEvalRun(ctx context.Context, provider, model string, results
 		return 0, err
 	}
 	for _, r := range results {
-		if _, err := s.pool.Exec(ctx, `
+		if _, err := tx.Exec(ctx, `
 			INSERT INTO eval_case_results (run_id, case_name, passed, detail)
 			VALUES ($1, $2, $3, $4)`, runID, r.CaseName, r.Passed, r.Detail); err != nil {
 			return 0, err
 		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
 	}
 	return runID, nil
 }

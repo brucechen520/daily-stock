@@ -91,6 +91,11 @@ func Check(c Case, output string) CaseResult {
 			fails = append(fails, fmt.Sprintf("出現禁詞 %q", f))
 		}
 	}
+	// golden set 每組資料都齊全，聲稱缺資料即為誤用（Validate 攔得掉大半，
+	// 這裡再攔一次是因為 Validate 只看代入前的原文，教學段與模板不經過它）。
+	if strings.Contains(output, report.NoDataPhrase) {
+		fails = append(fails, fmt.Sprintf("出現 %q，但本案資料齊全", report.NoDataPhrase))
+	}
 	if len(fails) > 0 {
 		return CaseResult{Name: c.Name, Passed: false, Detail: strings.Join(fails, "; ")}
 	}

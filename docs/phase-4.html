@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Phase 1 — 盤後白話摘要 MVP 完成報告 — daily-stock</title>
+<title>Phase 4 — Web Dashboard（Go API + React/TS 前端）+ 基本容器化 — daily-stock</title>
 <style>
 :root {
   --bg:#ffffff; --bg-soft:#f6f8fa; --bg-sink:#eaeef2;
@@ -167,18 +167,18 @@ pre.mermaid svg{max-width:100%;height:auto}
   <aside id="sidebar">
     <div class="brand">
       <div class="kicker">daily-stock</div>
-      <div class="name">Phase 1 — 盤後白話摘要 MVP 完成報告</div>
+      <div class="name">Phase 4 — Web Dashboard（Go API + React/TS 前端）+ 基本容器化</div>
     </div>
     <nav class="doc-switch">
       <a href="../ARCHITECTURE.html" title="架構"><span class="num">00</span><span>架構</span></a>
       <a href="ROADMAP.html" title="daily-stock — 全 Phase Roadmap"><span class="num">01</span><span>全 Phase Roadmap</span></a>
       <a href="phase-0-prd.html" title="Phase 0 — 產品需求規格書（PRD）"><span class="num">02</span><span>Phase 0 — PRD</span></a>
       <a href="phase-1.html" title="Phase 1 — 盤後白話摘要 MVP（自動抓取 + Postgres 落地）"><span class="num">03</span><span>Phase 1 — 盤後白話摘要</span></a>
-      <a class="current" href="phase-1-report.html" title="Phase 1 — 盤後白話摘要 MVP 完成報告"><span class="num">04</span><span>Phase 1 完成報告</span></a>
+      <a href="phase-1-report.html" title="Phase 1 — 盤後白話摘要 MVP 完成報告"><span class="num">04</span><span>Phase 1 完成報告</span></a>
       <a href="phase-1.5.html" title="Phase 1.5 — 自選股每日追蹤（自用版）"><span class="num">05</span><span>Phase 1.5 — 自選股追蹤</span></a>
       <a href="phase-2.html" title="Phase 2 — 技術指標 + 訊號引擎 + 回測方法論"><span class="num">06</span><span>Phase 2 — 訊號與回測</span></a>
       <a href="phase-3.html" title="Phase 3 — 新聞 RAG + 個股問答 Agent"><span class="num">07</span><span>Phase 3 — RAG 與問答</span></a>
-      <a href="phase-4.html" title="Phase 4 — Web Dashboard（Go API + React/TS 前端）+ 基本容器化"><span class="num">08</span><span>Phase 4 — Web Dashboard</span></a>
+      <a class="current" href="phase-4.html" title="Phase 4 — Web Dashboard（Go API + React/TS 前端）+ 基本容器化"><span class="num">08</span><span>Phase 4 — Web Dashboard</span></a>
       <a href="phase-4-slice.html" title="Phase 4 切片 — 摘要頁（React + TS + Redux + Docker），一週"><span class="num">09</span><span>Phase 4 切片 — 摘要頁</span></a>
       <a href="BACKLOG.html" title="BACKLOG — 已決定暫緩的項目"><span class="num">10</span><span>Backlog（暫緩項目）</span></a>
     </nav>
@@ -196,235 +196,204 @@ pre.mermaid svg{max-width:100%;height:auto}
 <button id="menu-toggle" aria-label="開關目錄">☰</button>
 
 <script id="md-src" type="text/plain">
-# Phase 1 — 盤後白話摘要 MVP 完成報告
+# Phase 4 — Web Dashboard（Go API + React/TS 前端）+ 基本容器化
 
-> 自動資料管線（TWSE 行情／三大法人／個股日K／新聞 RSS → Postgres）+ 模板代入防幻覺的 LLM 白話摘要 + 輸出忠實度 eval harness。本階段**不產生任何買賣訊號**。
->
-> 本報告是 **Phase 1 交付當下（commit `34a453a`）的凍結快照**，下方統計數字不隨後續 phase 更新。現況請看 [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §6 完成度與 [`phase-1.5.md`](phase-1.5.md) §6 里程碑。
+## 目標
 
-| 指標 | 數字 |
-| --- | --- |
-| CLI 子指令 | 7 |
-| 資料表 | 8 |
-| eval golden case | 20 |
-| 術語辭典詞彙 | 12 |
-| LLM provider | 3 |
-| Go 行數 | 2,689 |
+把前三個 phase 的產出變成看得到的東西：**Go API（REST + SSE）+ React 18 + TypeScript + Vite 前端**，四個頁面。同時補上最基本的工程化：Dockerfile + docker-compose 一鍵起整套、GitHub Actions 跑測試與 eval gate。
 
----
+雲端部署**本階段不做**——先本機 compose 跑通全功能，之後要上雲（Fly.io / VPS / GCP）時前端後端都已容器化，搬過去是配置問題不是改碼問題。
 
-## 一、已完成功能
+技術選型的理由（面試會被問「為什麼不用 X」）：
 
-| 功能 | 實作位置 | 說明 | 狀態 |
-| --- | --- | --- | --- |
-| Postgres + 自動 migration | `store.New` → `goose.Up` | migrations 以 `go:embed` 打包進 binary，任何指令啟動時自動建表，無須手動 migrate | ✅ 完成 |
-| 抓大盤成交資訊 | TWSE OpenAPI `FMTQIK` | 回傳**整月**每日資料 → 漏抓幾天會自動補回 | ✅ 完成 |
-| 抓三大法人買賣超 | TWSE OpenAPI `BFI82U` | 全市場總額（外資／投信／自營商），無個股層級 | ✅ 完成 |
-| 抓全市場個股日K | TWSE OpenAPI `STOCK_DAY_ALL` | 只回當日，一次全市場 1000+ 檔 | ✅ 完成 |
-| 個股歷史回補 | RWD `STOCK_DAY`，按月分頁 | `backfill --symbol 2330 --from 2026-05` | ✅ 完成 |
-| 財金新聞抓取 | RSS（預設自由時報財經） | `url` 唯一鍵去重；`ExtractSymbols` 抽「台積電(2330)」括號代號 | ✅ 完成 |
-| raw + normalized 雙層 | `raw_payloads` 表 | 原始 payload 全存 → `reparse` 可重放解析，解析 bug 修完不用重爬 | ✅ 完成 |
-| 冪等寫入 | 全部 `ON CONFLICT DO UPDATE` | 同日重跑任意次結果相同——排程重試與手動補抓都安全 | ✅ 完成 |
-| LLM 白話摘要 | `report.Generate` | 模板代入：LLM 只准輸出 `{欄位}` 佔位符，**一個數字都不准寫** | ✅ 完成 |
-| Provider 可切換 | `llm.Provider` 介面 | Anthropic ／ Gemini ／ Ollama；Gemini 與 Ollama 共用 OpenAI-compat adapter | ✅ 完成 |
-| 術語辭典 | `glossary/terms.yaml` | 12 詞（DoD 要求 ≥ 10） | ✅ 完成 |
-| eval harness | `eval/cases.yaml` | 20 組 golden case，結果落 `eval_runs` / `eval_case_results` | ✅ 完成 |
-| 長駐排程器 | `robfig/cron`（Asia/Taipei） | 平日 17:30 ingest（重試 3 次／間隔 10 分）、18:30 summary、每 30 分 news；每個 job 包 redis 分散式鎖 | ✅ 完成 |
-| 出站速率限制 | rediskit `RateLimiter` | Redis 未設定時降為 no-op（啟動時 log 提示） | ✅ 完成 |
-
----
-
-## 二、資料流
-
-```mermaid
-flowchart TD
-    A["1. 抓取<br/>internal/market · internal/news"] --> B["2. 落地 raw<br/>raw_payloads (JSONB)"]
-    B --> C["3. 落地 normalized<br/>market_index_daily · institutional_daily<br/>stock_daily · news"]
-    C --> D["4. 組 Snapshot<br/>internal/report"]
-    D --> E["5. LLM 產文<br/>只允許輸出佔位符"]
-    E --> F["6. 驗證 + 渲染<br/>Validate → 代入真值"]
-    F --> G["7. 落地<br/>summaries"]
-    B -. reparse 重放 .-> C
-```
-
-1. **抓取** · `internal/market` / `internal/news`
-   TWSE OpenAPI 與 RSS。回傳「解析後結構 + 原始 `json.RawMessage`」兩份。
-
-2. **落地 raw** · `raw_payloads`
-   原始 payload 進 JSONB，唯一鍵 `(source, endpoint, trade_date)`。這是 `reparse` 能重放的原因。
-
-3. **落地 normalized** · `market_index_daily` / `institutional_daily` / `stock_daily` / `news`
-   全部 upsert。查詢端一律讀這裡，不碰爬蟲。
-
-4. **組 Snapshot** · `internal/report`
-   從 pg 讀當日大盤與三大法人 → `report.Snapshot` → `Fields()` 產出「欄位名 → 真值」對照表。
-
-5. **LLM 產文（只有佔位符）**
-   prompt 明令「輸出中不可出現任何阿拉伯數字」，只能用 `{欄位名}` 引用。
-
-6. **驗證 + 渲染**
-   `Validate` 檢查佔位符 ∈ 允許欄位集，非法即 reject；通過後程式把真值代入 → 數字永遠是真的。
-
-7. **落地** · `summaries`
-   唯一鍵 `(trade_date, provider, model)`，同時是 eval 的素材庫與 Phase 4 前端的資料來源。
-
-> **這個設計的重點**
-> **數字錯誤被結構性消滅**，而不是靠 prompt 拜託 LLM 不要寫錯。LLM 想寫錯數字都做不到——它根本沒有輸出數字的權限。剩下的風險只有兩類：方向曲解（買超被說成賣壓）與紀律違規（出現建議性字眼），這兩類交給 eval 把關。
-
----
-
-## 三、資料表
-
-| 表 | 用途 | 冪等鍵 |
+| 選擇 | 不選 | 理由 |
 | --- | --- | --- |
-| `raw_payloads` | 原始 API 回應（審計 + 重解析） | `(source, endpoint, trade_date)` |
-| `market_index_daily` | 大盤指數／成交量值 | `trade_date` |
-| `institutional_daily` | 三大法人買賣超（全市場總額） | `(trade_date, actor)` |
-| `stock_daily` | 個股日K（全市場） | `(symbol, trade_date)` |
-| `news` | 財金新聞 | `url` |
-| `summaries` | LLM 摘要產出 | `(trade_date, provider, model)` |
-| `eval_runs` | eval 執行紀錄與 pass rate | — |
-| `eval_case_results` | 逐案結果（FK → `eval_runs`） | — |
-
-`CREATE EXTENSION vector` 已在 `001_init.sql` 開啟——Phase 3 加向量欄位時零遷移。
+| React + TS + Vite（純 SPA）| Next.js | 無 SEO/SSR 需求；純 SPA + Go API 展示「前後端分離的 API 設計」，Next 會把後端舞台搶走 |
+| SSE | WebSocket | LLM streaming 是單向下行，SSE 天生匹配、可走一般 HTTP、斷線自動重連；WebSocket 是雙向才需要 |
+| TanStack Query + useState | Redux | 這個規模的狀態 90% 是「server 資料的快取」，TanStack Query 就是幹這個的；引 Redux 是儀式感 |
+| lightweight-charts（K線）+ Recharts（其他）| 自刻 / ECharts 全包 | K 線自己畫是天坑；TradingView 的 lib 是業界標準且免費 |
 
 ---
 
-## 四、CLI 指令
+## 1. `internal/api` — HTTP API 設計
 
-| 指令 | 作用 |
-| --- | --- |
-| `daily-stock schedule` | 長駐排程（平日 17:30 抓資料、18:30 生成摘要、每 30 分抓新聞） |
-| `daily-stock ingest` | 手動抓當日市場資料 |
-| `daily-stock news` | 手動抓一輪新聞 |
-| `daily-stock backfill --symbol 2330 --from 2026-01 [--to 2026-06]` | 回補個股歷史（按月分頁） |
-| `daily-stock summary [--date 2026-08-07]` | 生成／重生成某日摘要（預設 DB 內最新交易日） |
-| `daily-stock eval` | 跑 golden set，結果落 `eval_runs` |
-| `daily-stock reparse` | 重放 `raw_payloads`（解析修復後用，不重爬） |
+### REST 端點
+
+```
+GET  /api/summary?date=2026-08-07          當日摘要（已生成的讀 DB，含術語註解）
+GET  /api/market/index?from=&to=           大盤指數序列（走勢圖用）
+GET  /api/market/institutional?from=&to=   三大法人買賣超序列（柱狀圖用）
+GET  /api/stocks/{symbol}/daily?from=&to=  個股日K OHLCV（K線圖用）
+GET  /api/stocks/{symbol}/indicators       MA/KD/MACD/RSI 現值 + 序列
+GET  /api/stocks/{symbol}/signal           訊號分數 + 分級 + 各因子貢獻 + 回測卡
+GET  /api/glossary                         術語辭典（tooltip 用，一次載入前端 cache）
+GET  /api/chats/{id}                       單次對話的完整記錄 + trace
+GET  /api/eval/runs?limit=50               eval 執行歷史（pass rate 時序）
+GET  /api/eval/runs/{id}                   單次 eval 明細（各類別分項 + 失敗案例）
+GET  /healthz                              liveness（compose healthcheck 用）
+```
+
+原則：
+
+- **API 只讀既有模組的產出，不含業務邏輯**——`internal/api` 是薄的 HTTP 皮，跟 CLI 共用同一層 service。CLI 與 Web 只是兩個 Deliver 出口。
+- 錯誤格式統一 `{"error": {"code": "...", "message": "..."}}`；找不到資料回 404 不回空物件。
+- 免責聲明由 API 帶出（`disclaimer` 欄位），前端不硬編碼——文案改一處生效。
+
+### SSE 端點（streaming）
+
+```
+POST /api/summary/stream        重新生成摘要，LLM token 逐字推送
+POST /api/chat                  agent 對話（body: {chat_id?, message}）
+```
+
+SSE 事件格式（`event:` + `data:` JSON），chat 的事件型別即 Phase 3 的 trace 結構：
+
+```
+event: token          data: {"text": "台"}                          ← LLM 逐字
+event: tool_call      data: {"name": "get_institutional", "args": {...}}
+event: tool_result    data: {"name": "...", "elapsed_ms": 120, "summary": {...}}
+event: citation       data: {"news_id": 42, "title": "...", "url": "..."}
+event: done           data: {"chat_id": "...", "usage": {...}}
+event: error          data: {"code": "...", "message": "..."}
+```
+
+**tool_call / tool_result 事件是前端 trace 側欄的資料來源**——後端本來就落地 trace（Phase 3），這裡只是即時轉播，零額外成本。
+
+### 開發期串接
+
+Vite dev server proxy `/api → localhost:8080`，免 CORS 設定；production 由 Go 直接 serve 前端靜態檔（見 §3），同源、也免 CORS。
 
 ---
 
-## 五、怎麼測試
+## 2. `web/` — 前端四頁面規格
 
-### 1. 單元測試（不需要 DB 或 API key）
-
-```bash
-go test ./...
+```
+web/
+├── src/
+│   ├── pages/
+│   │   ├── SummaryPage.tsx     ① 今日摘要
+│   │   ├── StockPage.tsx       ② 個股頁（/stocks/2330）
+│   │   ├── ChatPage.tsx        ③ Agent 對話
+│   │   └── EvalPage.tsx        ④ Eval 儀表板
+│   ├── components/             共用：圖表包裝、術語 Tooltip、免責 Footer、SSE hook
+│   ├── api/                    typed client（手寫 fetch 包裝 + 型別，端點少不用 codegen）
+│   └── hooks/useSSE.ts         fetch + ReadableStream 解析 SSE（POST 端點 EventSource 不支援）
 ```
 
-目前 `eval` / `market` / `news` / `report` 四包通過。`market` 的測試特別涵蓋民國年日期解析與非交易日空回應——那是最容易錯的地方。
+### ① 今日摘要頁（`/`）
 
-### 2. 起基礎設施
+- 大盤走勢圖（近 60 日收盤線圖）+ 三大法人買賣超柱狀圖（近 20 日，三色）
+- LLM 白話摘要卡：預設顯示已生成內容；「重新生成」按鈕走 SSE **逐字打出**
+- 術語底線虛線 + hover tooltip（glossary 對照），教學感的核心互動
+- 資料日期選擇器（回看歷史摘要）
 
-```bash
-docker compose up -d      # pg(pgvector) + redis
-docker compose ps         # 確認 healthy
-```
+### ② 個股頁（`/stocks/:symbol`）
 
-### 3. 設定 .env
+- K 線圖 + MA5/20/60 疊線（lightweight-charts），區間切換 3M/6M/1Y
+- 籌碼因子時序：外資連買天數、買賣超 N 日均
+- **訊號分數卡（本頁核心）**：分數儀表 + 分級標籤 + **各因子貢獻水平條**——「為什麼是這個分數」一眼看懂，explainability 的視覺化
+- 回測卡：walk-forward 各視窗勝率、vs 大盤 baseline、最大回撤 + 「歷史回測不保證未來」聲明（每次顯示，不只 README）
 
-用 Gemini 的話：
+### ③ Agent 對話頁（`/chat`）
 
-```bash
-LLM_PROVIDER=gemini
-GEMINI_API_KEY=<你的 key>
-GEMINI_MODEL=gemini-2.5-flash
-```
+- 左：訊息串。assistant 回覆逐字 streaming；訊息內引用標 `[1]`，點開新聞出處（title + url + 日期）
+- 右：**tool-call trace 側欄**——每次工具呼叫即時出現一列（工具名、參數、耗時、狀態），可展開看回傳 JSON。生成中有進行狀態
+- 這頁是全案差異化：市面 agent demo 都把過程藏起來，這裡把「agent 怎麼想」透明化
+- 輸入框下方常駐免責：本工具不提供投資建議
 
-未設 `REDIS_ADDR` 也能跑，lock 與 rate limit 會降為 no-op（啟動時會 log 出來）。
+### ④ Eval 儀表板（`/eval`）
 
-### 4. 抓資料並驗證落地
-
-```bash
-go run ./cmd/daily-stock ingest
-```
-
-log 應出現 `[ingest] market 完成：index=N 日, institutional=true, stocks=NNNN 檔`。接著查 DB：
-
-```bash
-docker compose exec db psql -U stock -d stock -c "
-  SELECT trade_date, close, change FROM market_index_daily ORDER BY trade_date DESC LIMIT 5;
-  SELECT * FROM institutional_daily ORDER BY trade_date DESC LIMIT 3;
-  SELECT count(*) FROM stock_daily;"
-```
-
-把 `close` / `change` 對照 TWSE 官網當日數字——這是驗證解析正確性最直接的方法。
-
-### 5. 驗冪等（Phase 1 的核心承諾）
-
-```bash
-docker compose exec db psql -U stock -d stock -c "SELECT count(*) FROM stock_daily;"
-go run ./cmd/daily-stock ingest      # 再跑一次
-docker compose exec db psql -U stock -d stock -c "SELECT count(*) FROM stock_daily;"
-```
-
-兩次 count 必須相同。
-
-### 6. 新聞去重
-
-```bash
-go run ./cmd/daily-stock news    # 第一次：抓 N 則、新增 N 則
-go run ./cmd/daily-stock news    # 第二次：抓 N 則、新增 0 則 ← url 去重生效
-```
-
-### 7. 生成摘要（會呼叫 LLM，燒 token）
-
-```bash
-go run ./cmd/daily-stock summary
-go run ./cmd/daily-stock summary --date 2026-08-07
-```
-
-> **最重要的驗證**
-> 輸出裡的**每一個數字**都必須與步驟 4 查到的 DB 值完全一致。任何一個對不上，代表模板代入機制破了——那是 M7 信任防線的核心，比摘要文筆重要得多。
-
-### 8. reparse 與 backfill
-
-```bash
-go run ./cmd/daily-stock reparse
-go run ./cmd/daily-stock backfill --symbol 2330 --from 2026-05
-```
-
-> **注意**
-> 未設 `REDIS_ADDR` 時 **backfill 沒有 rate limit 保護**。回補大範圍前先把 Redis 設好，否則有被 TWSE 擋的風險——被 ban 整條管線都會停擺。
-
-### 9. eval
-
-```bash
-go run ./cmd/daily-stock eval
-```
-
-逐案印 ✅/❌ 與 pass rate，結果落 `eval_runs`。20 組都走完整 LLM 呼叫，換 provider 或改 prompt 後要重跑比較。
-
-### 10. 排程
-
-```bash
-go run ./cmd/daily-stock schedule
-```
-
-會停在 `[schedule] 排程啟動…`，但平日 17:30 / 18:30 才觸發，當下只會看到啟動 log 與每 30 分鐘的 news job。想立刻驗證觸發邏輯，把 `internal/scheduler/scheduler.go` 第 63–64 行的 cron spec 暫時改成 `*/2 * * * *`，確認 job 有跑、lock 有生效，測完改回來。
+- Pass rate 折線（x=eval run 時間，每次改 prompt/換模型一個點），hover 顯示當次 git commit / provider
+- 分類別柱狀：數字忠實 / 引用完整 / 紀律邊界 / 工具選擇 各自 pass rate
+- 失敗案例列表：輸入 → 期望 → 實際輸出，並排 diff
+- 資料來源：eval run 結果落 DB（`eval_runs` / `eval_case_results` 兩張表，CI 跑完寫入）
 
 ---
 
-## 六、已知落差
+## 3. 容器化（本階段只做基本版）
 
-| 項目 | 說明 | 處理 |
-| --- | --- | --- |
-| `internal/store` 無測試 | testcontainers 起真 pg 驗 upsert 冪等與 migration 可重放，是 DoD 項目但尚未實作 | ✅ 已於 Phase 1.5 週 2 前補上 |
-| README demo 輸出與排程 log 截圖 | DoD 項目 | Phase 1.5 週 3 |
-| 摘要不含個股 | `stock_daily` 已落地全市場資料，但摘要只涵蓋大盤與法人總額 | Phase 1.5 主題 |
-| 個股層級三大法人 | 目前只有 `BFI82U` 全市場總額，個股需 `T86` 端點 | Phase 1.5 週 2 |
-| 未還原股價 | TWSE 回的是未還原價，除權息日會出現假跳空 | Phase 1.5 週 3 |
-| Kafka 事件 | `ENABLE_KAFKA` 已在 config 預留，尚未接線 | Phase 3 才需要 |
+### Dockerfile（multi-stage：前端 build → Go build → 極小 runtime）
+
+```dockerfile
+# --- 前端 ---
+FROM node:22-alpine AS web
+WORKDIR /app/web
+COPY web/package*.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build                      # → /app/web/dist
+
+# --- 後端 ---
+FROM golang:1.26-alpine AS build
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+COPY --from=web /app/web/dist ./web/dist
+RUN CGO_ENABLED=0 go build -o /daily-stock ./cmd/daily-stock
+# web/dist 用 go:embed 進 binary → 單一執行檔含前端
+
+# --- runtime ---
+FROM gcr.io/distroless/static-debian12
+COPY --from=build /daily-stock /daily-stock
+EXPOSE 8080
+ENTRYPOINT ["/daily-stock", "serve"]
+```
+
+前端靜態檔用 `go:embed` 塞進 binary：部署物只有一個檔 + 一個 DB，之後搬任何雲都最省事。
+
+### docker-compose.yaml：只加 app service
+
+基礎設施（pg/redis/kafka/ollama）**Phase 1 的 compose 就建好了**（見 `phase-1.md` §1），本階段只是把開發期跑在 host 的 app 也裝進 compose：
+
+```yaml
+# 加進 Phase 1 的 docker-compose.yaml
+  app:
+    build: .
+    command: ["serve", "--with-scheduler"]   # API + 內建排程一起跑
+    ports: ["127.0.0.1:8080:8080"]
+    env_file: .env                     # ANTHROPIC_API_KEY / VOYAGE_API_KEY…，不進 image
+    environment:
+      DATABASE_URL: postgres://stock:devpass_change_me@db:5432/stock?sslmode=disable
+      REDIS_ADDR: redis:6379
+    depends_on:
+      db: { condition: service_healthy }
+```
+
+- 排程沿用 Phase 1 的 in-process scheduler（`--with-scheduler`），app 容器一顆就含 API + 排程,不引入額外元件。
+- **雲端部署：延後**。到時的選項（Fly.io / GCP Cloud Run / VPS）都吃這個 image，屆時只補 secrets 管理與 managed Postgres 遷移，程式不動。
+
+### CI（GitHub Actions，最小集）
+
+```
+on: pull_request
+jobs:
+  backend:  go vet + go test ./...
+  frontend: npm ci + tsc --noEmit + npm run build
+  eval-gate:                      # 有 API key secret 才跑（fork PR 自動略過）
+    daily-stock eval --provider anthropic
+    → pass rate < 門檻（例 90%）→ job fail 擋 merge
+    → 結果寫回 eval_runs（給儀表板）
+```
 
 ---
 
-## 七、下一步
+## 測試策略
 
-Phase 1.5 — 自選股每日追蹤（自用版）：watchlist 持倉、個股三大法人（T86）、除權息還原、描述性統計、Discord 推播。三週垂直切片，規格見 `docs/phase-1.5.md`；暫緩項目與重啟條件見 `docs/BACKLOG.md`。
+- `internal/api`：`httptest` 打端點，斷言 JSON shape 與錯誤格式；SSE 用假 provider 餵固定 token 流，斷言事件序列（token* → done）與 `text/event-stream` header
+- `web/`：`tsc --noEmit` 當型別測試 + Vitest 測 SSE 解析 hook（餵預錄 byte stream）；**不追求前端高覆蓋**，重點在 hook 與 api client
+- compose 冒煙：`docker compose up -d && curl localhost:8080/healthz`（CI optional job）
 
----
+## Phase 4 完成的定義（Definition of Done）
 
-本專案僅供個人學習與回測研究使用，不對外提供服務。所有產出均為研究與教育性質，**非投資建議**，不構成任何買賣邀約。
+- [ ] `daily-stock serve` 起 API + 前端（單 binary，`go:embed`）
+- [ ] 四頁面完成：摘要（含 SSE 逐字）、個股（K線 + 因子貢獻 + 回測卡）、對話（含 trace 側欄 + 引用）、eval 儀表板
+- [ ] SSE chat 端到端：tool_call/tool_result 事件即時出現在 trace 側欄
+- [ ] 每頁含免責聲明，文案由 API 下發
+- [ ] `docker compose up` 一鍵起 app + pgvector，healthcheck 通過
+- [ ] GitHub Actions：backend + frontend 必跑，eval gate 在有 key 時擋 merge
+- [ ] eval run 結果落 DB，儀表板讀得到歷史 pass rate
+- [ ] README 補：本機啟動步驟 + 架構圖 + 各頁截圖
 
 </script>
 

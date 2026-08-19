@@ -38,12 +38,16 @@ AI 台股盤後分析研究工具。輸入台股公開資料（大盤、三大�
 | --- | --- | --- |
 | **0** | 產品需求規格書（PRD）：功能模組 M1–M9、使用者故事、驗收標準、法遵紅線。**產品化情境的規格演練，現階段未對外** | [docs/phase-0-prd.md](docs/phase-0-prd.md) |
 | 全局 | 工程順序、模組表、資料來源、風險紀律 | [docs/ROADMAP.md](docs/ROADMAP.md) |
+| 全局 | 已決策暫緩的項目（含暫緩理由與重啟條件）| [docs/BACKLOG.md](docs/BACKLOG.md) |
 | **1** | 盤後白話摘要 MVP：TWSE 資料 + LLM 摘要 + 術語 + eval set | [docs/phase-1.md](docs/phase-1.md) |
-| **2'** | 回測極簡版（timebox）：單因子 walk-forward 跑通；完整量化版留作 2'' | [docs/phase-2.md](docs/phase-2.md) |
+| **1.5** | **自選股每日追蹤（自用版）**：watchlist 持倉 + 個股法人 + 除權息還原 + 描述性統計 + Discord 推播。**本階段** | [docs/phase-1.5.md](docs/phase-1.5.md) |
+| **2'** | 回測極簡版（timebox）：單因子 walk-forward 跑通；完整量化版留作 2''（**暫緩**）| [docs/phase-2.md](docs/phase-2.md) |
 | **3** | 新聞 RAG（pgvector + hybrid 檢索）+ 個股問答 agent + agent eval | [docs/phase-3.md](docs/phase-3.md) |
 | **4** | Go API（REST + SSE）+ React/TS 前端四頁 + Docker/CI | [docs/phase-4.md](docs/phase-4.md) |
 
 > 順序理由：學習目標是 AI 應用，RAG / embedding / agent / eval 全在 Phase 3，故升為主菜；Phase 2 是量化工程（AI 含量最低），降為極簡 timebox 版，保住「回測站得住才出訊號」的原則。
+>
+> Phase 1.5 是後來插隊的：專案第一優先從「作品集」改為「自己每天實際使用」，最痛的需求變成「我持有的這幾檔今天怎麼了」。它仍只做**描述性統計**，不出訊號，紅線不動。決策過程見 [phase-1.5.md](docs/phase-1.5.md) §1。
 
 ## 快速開始
 
