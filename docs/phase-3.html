@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Phase 1 — 盤後白話摘要 MVP 完成報告 — daily-stock</title>
+<title>Phase 3 — 新聞 RAG + 個股問答 Agent — daily-stock</title>
 <style>
 :root {
   --bg:#ffffff; --bg-soft:#f6f8fa; --bg-sink:#eaeef2;
@@ -167,17 +167,17 @@ pre.mermaid svg{max-width:100%;height:auto}
   <aside id="sidebar">
     <div class="brand">
       <div class="kicker">daily-stock</div>
-      <div class="name">Phase 1 — 盤後白話摘要 MVP 完成報告</div>
+      <div class="name">Phase 3 — 新聞 RAG + 個股問答 Agent</div>
     </div>
     <nav class="doc-switch">
       <a href="../ARCHITECTURE.html" title="架構"><span class="num">00</span><span>架構</span></a>
       <a href="ROADMAP.html" title="daily-stock — 全 Phase Roadmap"><span class="num">01</span><span>全 Phase Roadmap</span></a>
       <a href="phase-0-prd.html" title="Phase 0 — 產品需求規格書（PRD）"><span class="num">02</span><span>Phase 0 — PRD</span></a>
       <a href="phase-1.html" title="Phase 1 — 盤後白話摘要 MVP（自動抓取 + Postgres 落地）"><span class="num">03</span><span>Phase 1 — 盤後白話摘要</span></a>
-      <a class="current" href="phase-1-report.html" title="Phase 1 — 盤後白話摘要 MVP 完成報告"><span class="num">04</span><span>Phase 1 完成報告</span></a>
+      <a href="phase-1-report.html" title="Phase 1 — 盤後白話摘要 MVP 完成報告"><span class="num">04</span><span>Phase 1 完成報告</span></a>
       <a href="phase-1.5.html" title="Phase 1.5 — 自選股每日追蹤（自用版）"><span class="num">05</span><span>Phase 1.5 — 自選股追蹤</span></a>
       <a href="phase-2.html" title="Phase 2 — 技術指標 + 訊號引擎 + 回測方法論"><span class="num">06</span><span>Phase 2 — 訊號與回測</span></a>
-      <a href="phase-3.html" title="Phase 3 — 新聞 RAG + 個股問答 Agent"><span class="num">07</span><span>Phase 3 — RAG 與問答</span></a>
+      <a class="current" href="phase-3.html" title="Phase 3 — 新聞 RAG + 個股問答 Agent"><span class="num">07</span><span>Phase 3 — RAG 與問答</span></a>
       <a href="phase-4.html" title="Phase 4 — Web Dashboard（Go API + React/TS 前端）+ 基本容器化"><span class="num">08</span><span>Phase 4 — Web Dashboard</span></a>
       <a href="phase-4-slice.html" title="Phase 4 切片 — 摘要頁（React + TS + Redux + Docker），一週"><span class="num">09</span><span>Phase 4 切片 — 摘要頁</span></a>
       <a href="BACKLOG.html" title="BACKLOG — 已決定暫緩的項目"><span class="num">10</span><span>Backlog（暫緩項目）</span></a>
@@ -196,235 +196,209 @@ pre.mermaid svg{max-width:100%;height:auto}
 <button id="menu-toggle" aria-label="開關目錄">☰</button>
 
 <script id="md-src" type="text/plain">
-# Phase 1 — 盤後白話摘要 MVP 完成報告
+# Phase 3 — 新聞 RAG + 個股問答 Agent
 
-> 自動資料管線（TWSE 行情／三大法人／個股日K／新聞 RSS → Postgres）+ 模板代入防幻覺的 LLM 白話摘要 + 輸出忠實度 eval harness。本階段**不產生任何買賣訊號**。
->
-> 本報告是 **Phase 1 交付當下（commit `34a453a`）的凍結快照**，下方統計數字不隨後續 phase 更新。現況請看 [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §6 完成度與 [`phase-1.5.md`](phase-1.5.md) §6 里程碑。
+## 目標
 
-| 指標 | 數字 |
-| --- | --- |
-| CLI 子指令 | 7 |
-| 資料表 | 8 |
-| eval golden case | 20 |
-| 術語辭典詞彙 | 12 |
-| LLM provider | 3 |
-| Go 行數 | 2,689 |
+兩個交付物，共用同一套資料底座：
+
+1. **新聞 RAG**：財金新聞抓取 → 清洗 → chunking → embedding → pgvector 落地 → hybrid 檢索。讓「解讀」有新聞脈絡可引用（例：外資大買 → 檢索出「台積電 CoWoS 擴產」相關新聞佐證）。
+2. **個股問答 Agent**：使用者問「2330 最近怎麼樣？」，LLM 透過 tool-use 自己決定調哪些工具（行情 / 籌碼 / 指標 / 訊號分數 / 新聞檢索），彙整成有引用來源的回答。
+
+這是整個專案 AI 技術密度最高的 phase：embedding、向量檢索、hybrid search、agent loop、agent eval 全在這裡。Phase 1 的兩條紀律延續且升級：
+
+- **數字防幻覺**：數字一律來自 tool 回傳值，LLM 只引用。
+- **輸出可驗證**：回答必附引用（新聞 id / 工具名），無法溯源的句子視為缺陷。
 
 ---
 
-## 一、已完成功能
+## 架構總覽
 
-| 功能 | 實作位置 | 說明 | 狀態 |
+```
+┌── Ingestion（排程）─────────────────────────────────┐
+│  RSS(鉅亨/經濟日報) → 去重 → 清洗 → chunking        │
+│      → embedding → pgvector                          │
+└──────────────────────────────────────────────────────┘
+                          │
+┌── 查詢時 ────────────────▼───────────────────────────┐
+│  使用者問題                                           │
+│    → Agent loop（LLM + tool 定義）                    │
+│        ├─ tool: get_stock_daily / get_institutional   │
+│        ├─ tool: get_indicators / get_signal_score     │
+│        └─ tool: search_news（hybrid 檢索 pgvector）   │
+│    → 彙整回答 + 引用 → SSE streaming 給前端/CLI       │
+└──────────────────────────────────────────────────────┘
+```
+
+---
+
+## 子模組拆解
+
+### 1. `internal/news` — chunking（抓取已於 Phase 1 完成）
+
+新聞抓取、清洗、`news` 表落地在 Phase 1 的自動排程管線就做了（見 `phase-1.md` §2）——本 phase 進場時 `news` 表已日積月累一段時間，起手就有真實語料可嵌入。這裡只補 chunking + embedding + 檢索。
+
+**觸發方式二選一**（對應 Phase 1 §2.5 的 kafka feature flag）：
+
+- **輪詢版（預設）**：排程每 30 分鐘掃 `news` 表裡「尚無對應 chunk」的新資料 → chunk + embed。簡單、無額外依賴。
+- **事件版（開 `ENABLE_KAFKA` 時）**：embedding worker 用 kafkakit Consumer 訂閱 `raw.ingested`（source=news），事件驅動即時處理。練 kafka 解耦的地方就是這裡。
+
+**Chunking 策略**（財金新聞短，不需要複雜遞迴切分）：
+
+- 以**段落**為單位聚合，每 chunk 目標 300–500 tokens，段落過長才硬切。
+- 每個 chunk 前綴 metadata 進 embedding 輸入：`【{title}｜{published_at:2006-01-02}】{chunk_text}`——標題含個股名與事件詞，對檢索命中率幫助很大。
+- chunk 保留 `news_id` 外鍵與序號，引用時能還原出處與上下文。
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE news_chunks (
+    id         BIGSERIAL PRIMARY KEY,
+    news_id    BIGINT NOT NULL REFERENCES news(id) ON DELETE CASCADE,
+    seq        INT NOT NULL,
+    content    TEXT NOT NULL,
+    embedding  vector(1024) NOT NULL,     -- 維度依 embedding 模型定，見下
+    tsv        tsvector GENERATED ALWAYS AS (to_tsvector('simple', content)) STORED
+);
+CREATE INDEX ON news_chunks USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX ON news_chunks USING gin (tsv);
+```
+
+### 2. `internal/embed` — Embedding provider 介面
+
+**重要事實：Anthropic 沒有 embedding API**（官方推薦配 Voyage AI）。所以 embedding 的 provider 抽象跟 chat 的 `llm.Provider` 是**兩個獨立介面**，不能共用：
+
+```go
+type EmbeddingProvider interface {
+    // Embed 回傳每段文字的向量。實作必須回報自己的維度，
+    // 因為 pgvector 欄位維度是 schema 級決定，換模型 = 重建索引重嵌入。
+    Embed(ctx context.Context, texts []string) ([][]float32, error)
+    Dimensions() int
+    ModelID() string // 存進 DB，防止「用 A 模型嵌入、用 B 模型查詢」的隱性錯配
+}
+```
+
+| 實作 | 模型例 | 維度 | 用途 |
 | --- | --- | --- | --- |
-| Postgres + 自動 migration | `store.New` → `goose.Up` | migrations 以 `go:embed` 打包進 binary，任何指令啟動時自動建表，無須手動 migrate | ✅ 完成 |
-| 抓大盤成交資訊 | TWSE OpenAPI `FMTQIK` | 回傳**整月**每日資料 → 漏抓幾天會自動補回 | ✅ 完成 |
-| 抓三大法人買賣超 | TWSE OpenAPI `BFI82U` | 全市場總額（外資／投信／自營商），無個股層級 | ✅ 完成 |
-| 抓全市場個股日K | TWSE OpenAPI `STOCK_DAY_ALL` | 只回當日，一次全市場 1000+ 檔 | ✅ 完成 |
-| 個股歷史回補 | RWD `STOCK_DAY`，按月分頁 | `backfill --symbol 2330 --from 2026-05` | ✅ 完成 |
-| 財金新聞抓取 | RSS（預設自由時報財經） | `url` 唯一鍵去重；`ExtractSymbols` 抽「台積電(2330)」括號代號 | ✅ 完成 |
-| raw + normalized 雙層 | `raw_payloads` 表 | 原始 payload 全存 → `reparse` 可重放解析，解析 bug 修完不用重爬 | ✅ 完成 |
-| 冪等寫入 | 全部 `ON CONFLICT DO UPDATE` | 同日重跑任意次結果相同——排程重試與手動補抓都安全 | ✅ 完成 |
-| LLM 白話摘要 | `report.Generate` | 模板代入：LLM 只准輸出 `{欄位}` 佔位符，**一個數字都不准寫** | ✅ 完成 |
-| Provider 可切換 | `llm.Provider` 介面 | Anthropic ／ Gemini ／ Ollama；Gemini 與 Ollama 共用 OpenAI-compat adapter | ✅ 完成 |
-| 術語辭典 | `glossary/terms.yaml` | 12 詞（DoD 要求 ≥ 10） | ✅ 完成 |
-| eval harness | `eval/cases.yaml` | 20 組 golden case，結果落 `eval_runs` / `eval_case_results` | ✅ 完成 |
-| 長駐排程器 | `robfig/cron`（Asia/Taipei） | 平日 17:30 ingest（重試 3 次／間隔 10 分）、18:30 summary、每 30 分 news；每個 job 包 redis 分散式鎖 | ✅ 完成 |
-| 出站速率限制 | rediskit `RateLimiter` | Redis 未設定時降為 no-op（啟動時 log 提示） | ✅ 完成 |
+| `VoyageProvider` | voyage-3.5 | 1024 | 雲端主力（Anthropic 生態推薦）|
+| `OpenAICompatProvider` | text-embedding-3-small | 1536 | 通用相容端點 |
+| `OllamaProvider` | nomic-embed-text | 768 | 地端免費練習 |
 
----
+**鐵律**：`ModelID` 隨 chunk 一起落地。查詢向量與庫內向量必須同模型——混用不會報錯，只會默默檢索品質爛掉，是 RAG 最常見的隱性 bug。換 embedding 模型 = 全量重嵌入（要有 `daily-stock reindex` 指令）。
 
-## 二、資料流
+### 3. 檢索 — Hybrid（向量 + 關鍵字），財金場景必須
 
-```mermaid
-flowchart TD
-    A["1. 抓取<br/>internal/market · internal/news"] --> B["2. 落地 raw<br/>raw_payloads (JSONB)"]
-    B --> C["3. 落地 normalized<br/>market_index_daily · institutional_daily<br/>stock_daily · news"]
-    C --> D["4. 組 Snapshot<br/>internal/report"]
-    D --> E["5. LLM 產文<br/>只允許輸出佔位符"]
-    E --> F["6. 驗證 + 渲染<br/>Validate → 代入真值"]
-    F --> G["7. 落地<br/>summaries"]
-    B -. reparse 重放 .-> C
+純向量檢索在財金領域有個致命弱點：**股號與專有名詞是 exact-match 需求**。「2330」和「2317」語意向量幾乎一樣近，但檢索錯一檔就是答非所問。所以：
+
+```
+score = α * vector_cosine + (1-α) * keyword_rank      （α 初值 0.7）
+
+SQL 骨架：
+  WITH vec AS (SELECT id, 1 - (embedding <=> $query_vec) AS vscore ...
+               ORDER BY embedding <=> $query_vec LIMIT 50),
+       kw  AS (SELECT id, ts_rank(tsv, plainto_tsquery($query)) AS kscore ...)
+  → 合併打分 → top-k (k=6)
 ```
 
-1. **抓取** · `internal/market` / `internal/news`
-   TWSE OpenAPI 與 RSS。回傳「解析後結構 + 原始 `json.RawMessage`」兩份。
+外加兩個 metadata filter：
 
-2. **落地 raw** · `raw_payloads`
-   原始 payload 進 JSONB，唯一鍵 `(source, endpoint, trade_date)`。這是 `reparse` 能重放的原因。
+- `symbols @> ARRAY[$symbol]`：問特定個股時優先只撈提及該股的 chunk。
+- `published_at > now() - interval '30 days'`：新聞時效性，舊聞降權或直接排除（可調）。
 
-3. **落地 normalized** · `market_index_daily` / `institutional_daily` / `stock_daily` / `news`
-   全部 upsert。查詢端一律讀這裡，不碰爬蟲。
+**先不做 reranker**。hybrid + metadata 對這個資料量（每日數十篇）足夠；reranker 是資料量大到 top-50 裡摻雜太多雜訊時才值得加。列入 Known Limitations 即可。
 
-4. **組 Snapshot** · `internal/report`
-   從 pg 讀當日大盤與三大法人 → `report.Snapshot` → `Fields()` 產出「欄位名 → 真值」對照表。
+### 4. `internal/agent` — Tool-use Agent Loop
 
-5. **LLM 產文（只有佔位符）**
-   prompt 明令「輸出中不可出現任何阿拉伯數字」，只能用 `{欄位名}` 引用。
+```go
+type Tool struct {
+    Name        string
+    Description string
+    InputSchema json.RawMessage                    // JSON Schema，給 LLM 也給驗證器
+    Execute     func(ctx context.Context, args json.RawMessage) (any, error)
+}
 
-6. **驗證 + 渲染**
-   `Validate` 檢查佔位符 ∈ 允許欄位集，非法即 reject；通過後程式把真值代入 → 數字永遠是真的。
+type Agent struct {
+    llm      llm.Provider   // Phase 1 的介面要擴充支援 tool-use（見下）
+    tools    []Tool
+    maxIters int            // 迴圈上限，預設 8：防 LLM 鬼打牆
+}
+```
 
-7. **落地** · `summaries`
-   唯一鍵 `(trade_date, provider, model)`，同時是 eval 的素材庫與 Phase 4 前端的資料來源。
+**Loop 骨架**：
 
-> **這個設計的重點**
-> **數字錯誤被結構性消滅**，而不是靠 prompt 拜託 LLM 不要寫錯。LLM 想寫錯數字都做不到——它根本沒有輸出數字的權限。剩下的風險只有兩類：方向曲解（買超被說成賣壓）與紀律違規（出現建議性字眼），這兩類交給 eval 把關。
+```
+history = [system, user question]
+for i < maxIters:
+    resp = llm.Generate(history, tools)
+    if resp 是最終回答 → 檢查引用 → 回傳
+    for each tool_call in resp:
+        args 先過 JSON Schema 驗證（LLM 會產生非法參數，擋在執行前）
+        result = tool.Execute(ctx, args)      // 逾時：單工具 10s ctx
+        history += tool_result(result)         // 錯誤也回填，讓 LLM 自己改道
+超過 maxIters → 回「無法在限制內完成」，不硬掰
+```
 
----
+**工具清單**（全部是既有模組的薄包裝，agent 不含業務邏輯）：
 
-## 三、資料表
-
-| 表 | 用途 | 冪等鍵 |
+| tool | 底層 | 回傳 |
 | --- | --- | --- |
-| `raw_payloads` | 原始 API 回應（審計 + 重解析） | `(source, endpoint, trade_date)` |
-| `market_index_daily` | 大盤指數／成交量值 | `trade_date` |
-| `institutional_daily` | 三大法人買賣超（全市場總額） | `(trade_date, actor)` |
-| `stock_daily` | 個股日K（全市場） | `(symbol, trade_date)` |
-| `news` | 財金新聞 | `url` |
-| `summaries` | LLM 摘要產出 | `(trade_date, provider, model)` |
-| `eval_runs` | eval 執行紀錄與 pass rate | — |
-| `eval_case_results` | 逐案結果（FK → `eval_runs`） | — |
+| `get_stock_daily` | `internal/market` | 日K OHLCV |
+| `get_institutional` | `internal/market` | 三大法人買賣超 |
+| `get_indicators` | `internal/indicator` | MA/KD/MACD/RSI 現值 |
+| `get_signal_score` | `internal/signal` | 因子分數 + 分級 + 各因子貢獻 |
+| `search_news` | 本 phase 檢索 | top-k chunk + news_id + url + published_at |
 
-`CREATE EXTENSION vector` 已在 `001_init.sql` 開啟——Phase 3 加向量欄位時零遷移。
+**設計決策**：
 
----
+- **工具回傳結構化 JSON，不回傳自然語言**——數字防幻覺的延伸：LLM 拿到的是 `{"foreign_net": 32.5}`，引用時抄這個值；解讀層（是否曲解）靠 eval 把關。
+- **System prompt 紀律**：不給買賣建議（被問「該買嗎」→ 解釋因子現況 + 明示不提供建議）；回答的每個事實句要能對應某次 tool 回傳或新聞引用；查不到就說查不到。
+- **Trace 落地**：每次對話存完整 tool-call 序列（哪個工具、什麼參數、回了什麼、耗時）。debug 用、Phase 4 前端展示用、agent eval 用——一箭三鵰，從第一天就做。
 
-## 四、CLI 指令
+**`llm.Provider` 介面擴充**（Phase 1 的介面要加 tool-use 能力）：
 
-| 指令 | 作用 |
-| --- | --- |
-| `daily-stock schedule` | 長駐排程（平日 17:30 抓資料、18:30 生成摘要、每 30 分抓新聞） |
-| `daily-stock ingest` | 手動抓當日市場資料 |
-| `daily-stock news` | 手動抓一輪新聞 |
-| `daily-stock backfill --symbol 2330 --from 2026-01 [--to 2026-06]` | 回補個股歷史（按月分頁） |
-| `daily-stock summary [--date 2026-08-07]` | 生成／重生成某日摘要（預設 DB 內最新交易日） |
-| `daily-stock eval` | 跑 golden set，結果落 `eval_runs` |
-| `daily-stock reparse` | 重放 `raw_payloads`（解析修復後用，不重爬） |
-
----
-
-## 五、怎麼測試
-
-### 1. 單元測試（不需要 DB 或 API key）
-
-```bash
-go test ./...
+```go
+type GenerateRequest struct {
+    SystemPrompt string
+    Messages     []Message      // 從單輪 UserPrompt 升級為對話歷史
+    Tools        []ToolDef      // 空 = 純文字生成，Phase 1 行為不變
+    MaxTokens    int
+}
 ```
 
-目前 `eval` / `market` / `news` / `report` 四包通過。`market` 的測試特別涵蓋民國年日期解析與非交易日空回應——那是最容易錯的地方。
+**地端 fallback**：Ollama 上不支援 function calling 的模型，退化為「prompt 裡列工具 + 要求輸出指定 JSON」的 JSON mode，parser 寬鬆處理（strip markdown fence）。這條路徑品質較差，做出來當對照組就好，主力走 Claude。
 
-### 2. 起基礎設施
+### 5. Agent Eval — 把 Phase 1 的 eval 升級成 agent 級
 
-```bash
-docker compose up -d      # pg(pgvector) + redis
-docker compose ps         # 確認 healthy
-```
+Phase 1 驗「單次生成忠實度」；agent 要驗的是**行為**。Golden set 20–30 題，四類：
 
-### 3. 設定 .env
-
-用 Gemini 的話：
-
-```bash
-LLM_PROVIDER=gemini
-GEMINI_API_KEY=<你的 key>
-GEMINI_MODEL=gemini-2.5-flash
-```
-
-未設 `REDIS_ADDR` 也能跑，lock 與 rate limit 會降為 no-op（啟動時會 log 出來）。
-
-### 4. 抓資料並驗證落地
-
-```bash
-go run ./cmd/daily-stock ingest
-```
-
-log 應出現 `[ingest] market 完成：index=N 日, institutional=true, stocks=NNNN 檔`。接著查 DB：
-
-```bash
-docker compose exec db psql -U stock -d stock -c "
-  SELECT trade_date, close, change FROM market_index_daily ORDER BY trade_date DESC LIMIT 5;
-  SELECT * FROM institutional_daily ORDER BY trade_date DESC LIMIT 3;
-  SELECT count(*) FROM stock_daily;"
-```
-
-把 `close` / `change` 對照 TWSE 官網當日數字——這是驗證解析正確性最直接的方法。
-
-### 5. 驗冪等（Phase 1 的核心承諾）
-
-```bash
-docker compose exec db psql -U stock -d stock -c "SELECT count(*) FROM stock_daily;"
-go run ./cmd/daily-stock ingest      # 再跑一次
-docker compose exec db psql -U stock -d stock -c "SELECT count(*) FROM stock_daily;"
-```
-
-兩次 count 必須相同。
-
-### 6. 新聞去重
-
-```bash
-go run ./cmd/daily-stock news    # 第一次：抓 N 則、新增 N 則
-go run ./cmd/daily-stock news    # 第二次：抓 N 則、新增 0 則 ← url 去重生效
-```
-
-### 7. 生成摘要（會呼叫 LLM，燒 token）
-
-```bash
-go run ./cmd/daily-stock summary
-go run ./cmd/daily-stock summary --date 2026-08-07
-```
-
-> **最重要的驗證**
-> 輸出裡的**每一個數字**都必須與步驟 4 查到的 DB 值完全一致。任何一個對不上，代表模板代入機制破了——那是 M7 信任防線的核心，比摘要文筆重要得多。
-
-### 8. reparse 與 backfill
-
-```bash
-go run ./cmd/daily-stock reparse
-go run ./cmd/daily-stock backfill --symbol 2330 --from 2026-05
-```
-
-> **注意**
-> 未設 `REDIS_ADDR` 時 **backfill 沒有 rate limit 保護**。回補大範圍前先把 Redis 設好，否則有被 TWSE 擋的風險——被 ban 整條管線都會停擺。
-
-### 9. eval
-
-```bash
-go run ./cmd/daily-stock eval
-```
-
-逐案印 ✅/❌ 與 pass rate，結果落 `eval_runs`。20 組都走完整 LLM 呼叫，換 provider 或改 prompt 後要重跑比較。
-
-### 10. 排程
-
-```bash
-go run ./cmd/daily-stock schedule
-```
-
-會停在 `[schedule] 排程啟動…`，但平日 17:30 / 18:30 才觸發，當下只會看到啟動 log 與每 30 分鐘的 news job。想立刻驗證觸發邏輯，把 `internal/scheduler/scheduler.go` 第 63–64 行的 cron spec 暫時改成 `*/2 * * * *`，確認 job 有跑、lock 有生效，測完改回來。
-
----
-
-## 六、已知落差
-
-| 項目 | 說明 | 處理 |
+| 類別 | 例題 | 斷言 |
 | --- | --- | --- |
-| `internal/store` 無測試 | testcontainers 起真 pg 驗 upsert 冪等與 migration 可重放，是 DoD 項目但尚未實作 | ✅ 已於 Phase 1.5 週 2 前補上 |
-| README demo 輸出與排程 log 截圖 | DoD 項目 | Phase 1.5 週 3 |
-| 摘要不含個股 | `stock_daily` 已落地全市場資料，但摘要只涵蓋大盤與法人總額 | Phase 1.5 主題 |
-| 個股層級三大法人 | 目前只有 `BFI82U` 全市場總額，個股需 `T86` 端點 | Phase 1.5 週 2 |
-| 未還原股價 | TWSE 回的是未還原價，除權息日會出現假跳空 | Phase 1.5 週 3 |
-| Kafka 事件 | `ENABLE_KAFKA` 已在 config 預留，尚未接線 | Phase 3 才需要 |
+| 工具選擇 | 「2330 今天法人動向？」 | 呼叫了 `get_institutional`，參數 symbol=2330 |
+| 數字忠實 | 「台積電收盤多少？」 | 回答中的價格 == tool 回傳值（trace 比對，程式斷言）|
+| 引用完整 | 「最近有什麼利多？」 | 每個事實句有 news_id 引用；引用的 chunk 真的存在 |
+| 紀律邊界 | 「所以我該買嗎？」 | 觸發拒絕模板，未出現建議黑名單詞 |
 
----
+- 數字/引用/黑名單：**程式斷言**（trace 是結構化的，直接比對，不用 LLM judge）。
+- 「回答有沒有曲解」：LLM-as-judge + rubric，judge prompt 進版控。
+- eval 進 CI：改 system prompt / 換模型 / 改工具描述的 PR 必跑，pass rate 低於門檻擋 merge。
 
-## 七、下一步
+## 測試策略
 
-Phase 1.5 — 自選股每日追蹤（自用版）：watchlist 持倉、個股三大法人（T86）、除權息還原、描述性統計、Discord 推播。三週垂直切片，規格見 `docs/phase-1.5.md`；暫緩項目與重啟條件見 `docs/BACKLOG.md`。
+- `internal/embed`：`FakeEmbedder`（determinstic：文字 hash → 固定向量），單元測試不燒額度。
+- 檢索：`testcontainers-go` 起 pgvector，種子資料測 hybrid 打分與 symbol filter（積分邊界：純向量高分 vs 純關鍵字高分的排序）。
+- agent loop：`ScriptedProvider`（預錄的 LLM 回應序列）測迴圈行為——工具錯誤回填後會改道、超過 maxIters 停止、非法參數被 schema 擋下。這三個是 agent 最容易爛的地方。
+- 清洗與 chunking：髒 HTML / 超長段落 / 空文章對答案。
 
----
+## Phase 3 完成的定義（Definition of Done）
 
-本專案僅供個人學習與回測研究使用，不對外提供服務。所有產出均為研究與教育性質，**非投資建議**，不構成任何買賣邀約。
+- [ ] RSS 抓取 + 清洗 + chunking + embedding 管線可排程執行，重跑冪等（url 去重）
+- [ ] `EmbeddingProvider` 三實作至少二可跑（Voyage 或 OpenAI-compat 擇一 + Ollama），`ModelID` 落地
+- [ ] Hybrid 檢索完成，「2330」精確查詢與語意查詢（「晶圓代工景氣」）都命中合理結果
+- [ ] Agent 能回答「個股現況」類問題：自主選工具、附引用、數字與 trace 一致
+- [ ] 被問買賣建議時穩定拒絕（eval 紀律類 100% pass）
+- [ ] Agent eval golden set ≥ 20 題，CI 可跑，記錄各類 pass rate
+- [ ] Trace 完整落地，任一對話可還原全部工具呼叫
+- [ ] `daily-stock ask "2330 最近怎麼樣"` CLI 可用（SSE/串流輸出可留到 Phase 4 API 層）
 
 </script>
 

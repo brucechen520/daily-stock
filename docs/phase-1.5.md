@@ -261,7 +261,8 @@ sender  → 把 Section 塞進通道限制（Discord 單則 2000 字元）  ← 
 - [ ] 報酬率：價格報酬 + 總報酬（§3.3）
 - [ ] glossary 擴到約 20 詞（含「價格報酬 / 總報酬 / 還原股價 / 量能 / 均線 / 乖離 / 連買連賣」）+ 命中優先挑選
 - [ ] eval 加 5–8 組持股歸納 case + 擴黑名單
-- [ ] **Phase 1 DoD 收尾**：`internal/store` testcontainers 冪等測試、README demo 輸出與排程 log
+- [x] `internal/store` testcontainers 冪等測試（提前到週 2 前做完——週 2 要新增 T86 寫入路徑，先有回歸網才動）
+- [ ] **Phase 1 DoD 收尾**：README demo 輸出與排程 log
 - [ ] `BACKLOG.md` 更新
 
 ---
@@ -299,7 +300,7 @@ sender  → 把 Section 塞進通道限制（Discord 單則 2000 字元）  ← 
 - [ ] eval 含持股歸納 case，`daily-stock eval` 通過
 - [ ] 成本 / 損益 / 新聞皆不出現在 LLM prompt（有測試斷言）
 - [ ] `data/positions.local.sql` 不在版控內
-- [ ] Phase 1 遺留 DoD（testcontainers、README demo）補齊
+- [ ] Phase 1 遺留 DoD 補齊（testcontainers ✅ 已完成；README demo 待補）
 - [ ] **我連續 5 個交易日真的打開來讀**（需求驗證，比上面全部更重要）
 
 > 最後一項是這個 phase 的真正驗收。做完卻三天就不看了，該砍的不是功能而是方向——早知道比晚知道好。

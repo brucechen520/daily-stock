@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Phase 1 — 盤後白話摘要 MVP 完成報告 — daily-stock</title>
+<title>Phase 4 切片 — 摘要頁（React + TS + Redux + Docker），一週 — daily-stock</title>
 <style>
 :root {
   --bg:#ffffff; --bg-soft:#f6f8fa; --bg-sink:#eaeef2;
@@ -167,19 +167,19 @@ pre.mermaid svg{max-width:100%;height:auto}
   <aside id="sidebar">
     <div class="brand">
       <div class="kicker">daily-stock</div>
-      <div class="name">Phase 1 — 盤後白話摘要 MVP 完成報告</div>
+      <div class="name">Phase 4 切片 — 摘要頁（React + TS + Redux + Docker），一週</div>
     </div>
     <nav class="doc-switch">
       <a href="../ARCHITECTURE.html" title="架構"><span class="num">00</span><span>架構</span></a>
       <a href="ROADMAP.html" title="daily-stock — 全 Phase Roadmap"><span class="num">01</span><span>全 Phase Roadmap</span></a>
       <a href="phase-0-prd.html" title="Phase 0 — 產品需求規格書（PRD）"><span class="num">02</span><span>Phase 0 — PRD</span></a>
       <a href="phase-1.html" title="Phase 1 — 盤後白話摘要 MVP（自動抓取 + Postgres 落地）"><span class="num">03</span><span>Phase 1 — 盤後白話摘要</span></a>
-      <a class="current" href="phase-1-report.html" title="Phase 1 — 盤後白話摘要 MVP 完成報告"><span class="num">04</span><span>Phase 1 完成報告</span></a>
+      <a href="phase-1-report.html" title="Phase 1 — 盤後白話摘要 MVP 完成報告"><span class="num">04</span><span>Phase 1 完成報告</span></a>
       <a href="phase-1.5.html" title="Phase 1.5 — 自選股每日追蹤（自用版）"><span class="num">05</span><span>Phase 1.5 — 自選股追蹤</span></a>
       <a href="phase-2.html" title="Phase 2 — 技術指標 + 訊號引擎 + 回測方法論"><span class="num">06</span><span>Phase 2 — 訊號與回測</span></a>
       <a href="phase-3.html" title="Phase 3 — 新聞 RAG + 個股問答 Agent"><span class="num">07</span><span>Phase 3 — RAG 與問答</span></a>
       <a href="phase-4.html" title="Phase 4 — Web Dashboard（Go API + React/TS 前端）+ 基本容器化"><span class="num">08</span><span>Phase 4 — Web Dashboard</span></a>
-      <a href="phase-4-slice.html" title="Phase 4 切片 — 摘要頁（React + TS + Redux + Docker），一週"><span class="num">09</span><span>Phase 4 切片 — 摘要頁</span></a>
+      <a class="current" href="phase-4-slice.html" title="Phase 4 切片 — 摘要頁（React + TS + Redux + Docker），一週"><span class="num">09</span><span>Phase 4 切片 — 摘要頁</span></a>
       <a href="BACKLOG.html" title="BACKLOG — 已決定暫緩的項目"><span class="num">10</span><span>Backlog（暫緩項目）</span></a>
     </nav>
     <div class="toc-search">
@@ -196,235 +196,222 @@ pre.mermaid svg{max-width:100%;height:auto}
 <button id="menu-toggle" aria-label="開關目錄">☰</button>
 
 <script id="md-src" type="text/plain">
-# Phase 1 — 盤後白話摘要 MVP 完成報告
+# Phase 4 切片 — 摘要頁（React + TS + Redux + Docker），一週
 
-> 自動資料管線（TWSE 行情／三大法人／個股日K／新聞 RSS → Postgres）+ 模板代入防幻覺的 LLM 白話摘要 + 輸出忠實度 eval harness。本階段**不產生任何買賣訊號**。
+> **這份文件是 [phase-4.md](phase-4.md) 的最小垂直切片，不是取代它。**
+> 四頁只做第一頁、API 只做這頁要的端點，但**技術深度不打折**——SSE streaming、型別安全、容器化、CI 全部做到位。
 >
-> 本報告是 **Phase 1 交付當下（commit `34a453a`）的凍結快照**，下方統計數字不隨後續 phase 更新。現況請看 [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §6 完成度與 [`phase-1.5.md`](phase-1.5.md) §6 里程碑。
-
-| 指標 | 數字 |
-| --- | --- |
-| CLI 子指令 | 7 |
-| 資料表 | 8 |
-| eval golden case | 20 |
-| 術語辭典詞彙 | 12 |
-| LLM provider | 3 |
-| Go 行數 | 2,689 |
+> **為什麼提前**：求職需要一份能展示 React + TypeScript 的實際作品，而 Phase 4 本來就規劃了 React/TS 前端。與其為了面試另外做一個 side project，不如把既有 roadmap 的東西往前挪——同一份工作，兩個用途。
+>
+> **代價**：Phase 1.5 週 2（T86 個股法人、MA/量能比、新聞比對）與週 3（除權息還原、報酬率）暫停，做完這個切片再回去。Discord 推播已經在跑，暫停期間不影響每日使用。
 
 ---
 
-## 一、已完成功能
+## 1. 目標與非目標
 
-| 功能 | 實作位置 | 說明 | 狀態 |
+### 目標
+
+一頁能動、能 demo、能被追問細節的東西：
+
+**`/` 今日摘要頁** — 大盤走勢圖 + 三大法人柱狀圖 + LLM 白話摘要（**SSE 逐字生成**）+ 術語 hover 教學 + 日期回看。
+
+### 非目標（這個切片明確不做）
+
+- ❌ 個股頁、對話頁、eval 儀表板（Phase 4 完整版才做）
+- ❌ K 線圖（lightweight-charts 有學習成本，摘要頁用不到）
+- ❌ 雲端部署（compose 跑通即可，同 phase-4.md）
+- ❌ 前端高測試覆蓋率（只測 SSE 解析 hook，那是唯一有邏輯的地方）
+
+---
+
+## 2. 技術選型（含與 phase-4.md 的差異）
+
+| 選擇 | phase-4.md 原本 | 這個切片 | 理由 |
 | --- | --- | --- | --- |
-| Postgres + 自動 migration | `store.New` → `goose.Up` | migrations 以 `go:embed` 打包進 binary，任何指令啟動時自動建表，無須手動 migrate | ✅ 完成 |
-| 抓大盤成交資訊 | TWSE OpenAPI `FMTQIK` | 回傳**整月**每日資料 → 漏抓幾天會自動補回 | ✅ 完成 |
-| 抓三大法人買賣超 | TWSE OpenAPI `BFI82U` | 全市場總額（外資／投信／自營商），無個股層級 | ✅ 完成 |
-| 抓全市場個股日K | TWSE OpenAPI `STOCK_DAY_ALL` | 只回當日，一次全市場 1000+ 檔 | ✅ 完成 |
-| 個股歷史回補 | RWD `STOCK_DAY`，按月分頁 | `backfill --symbol 2330 --from 2026-05` | ✅ 完成 |
-| 財金新聞抓取 | RSS（預設自由時報財經） | `url` 唯一鍵去重；`ExtractSymbols` 抽「台積電(2330)」括號代號 | ✅ 完成 |
-| raw + normalized 雙層 | `raw_payloads` 表 | 原始 payload 全存 → `reparse` 可重放解析，解析 bug 修完不用重爬 | ✅ 完成 |
-| 冪等寫入 | 全部 `ON CONFLICT DO UPDATE` | 同日重跑任意次結果相同——排程重試與手動補抓都安全 | ✅ 完成 |
-| LLM 白話摘要 | `report.Generate` | 模板代入：LLM 只准輸出 `{欄位}` 佔位符，**一個數字都不准寫** | ✅ 完成 |
-| Provider 可切換 | `llm.Provider` 介面 | Anthropic ／ Gemini ／ Ollama；Gemini 與 Ollama 共用 OpenAI-compat adapter | ✅ 完成 |
-| 術語辭典 | `glossary/terms.yaml` | 12 詞（DoD 要求 ≥ 10） | ✅ 完成 |
-| eval harness | `eval/cases.yaml` | 20 組 golden case，結果落 `eval_runs` / `eval_case_results` | ✅ 完成 |
-| 長駐排程器 | `robfig/cron`（Asia/Taipei） | 平日 17:30 ingest（重試 3 次／間隔 10 分）、18:30 summary、每 30 分 news；每個 job 包 redis 分散式鎖 | ✅ 完成 |
-| 出站速率限制 | rediskit `RateLimiter` | Redis 未設定時降為 no-op（啟動時 log 提示） | ✅ 完成 |
+| 狀態/資料層 | TanStack Query | **Redux Toolkit + RTK Query** | 見下方說明 |
+| UI 元件庫 | 未指定 | **Ant Design 5** | 一天內做出不醜的版面；表單、日期選擇器、Skeleton 直接有 |
+| 圖表 | Recharts | **Recharts** | 不變。這頁只有折線 + 柱狀，Recharts 夠且 API 單純 |
+| 建置 | Vite | **Vite + React 18 + TS strict** | 不變 |
+| 路由 | 未指定 | **不用 router** | 只有一頁。之後加頁再引 React Router，現在引是空轉 |
+
+### 為什麼從 TanStack Query 改成 RTK Query
+
+phase-4.md 原本的判斷是：「這個規模的狀態 90% 是 server 資料的快取，TanStack Query 就是幹這個的；引 Redux 是儀式感。」**那個判斷在技術上仍然成立**，但這個切片改用 RTK Query，理由有兩層：
+
+1. **RTK Query 不是 Redux 的舊寫法。** 它跟 TanStack Query 是同一類東西——宣告式的 server-cache 層，自動處理 loading/error/失效/重取。用它不等於回到手寫 action creator 與 reducer 樣板。所以「引 Redux 是儀式感」這句批評，針對的是傳統 Redux 寫法，不適用於 RTK Query。
+2. **求職上這個技能有市場需求**，而技術上它不是壞選擇——這兩件事同時成立時，選有需求的那個。
+
+**面試被問到時的誠實答案**：「我原本評估的是 TanStack Query，理由寫在 phase-4.md 的選型表裡。後來改用 RTK Query，因為兩者在 server-cache 這件事上的能力接近，而 RTK Query 帶來的 store 在之後要做 agent 對話頁的暫存訊息時會用到。我不會為了用 Redux 而把 server 資料手動塞進 store——那才是儀式感。」
+
+這個回答比「我用 Redux 因為大家都用」強得多，而且是真的。
 
 ---
 
-## 二、資料流
+## 3. 後端：`internal/api`
 
-```mermaid
-flowchart TD
-    A["1. 抓取<br/>internal/market · internal/news"] --> B["2. 落地 raw<br/>raw_payloads (JSONB)"]
-    B --> C["3. 落地 normalized<br/>market_index_daily · institutional_daily<br/>stock_daily · news"]
-    C --> D["4. 組 Snapshot<br/>internal/report"]
-    D --> E["5. LLM 產文<br/>只允許輸出佔位符"]
-    E --> F["6. 驗證 + 渲染<br/>Validate → 代入真值"]
-    F --> G["7. 落地<br/>summaries"]
-    B -. reparse 重放 .-> C
+### 端點（只做這頁要的）
+
+```
+GET  /api/summary?date=2026-08-11        當日摘要（讀 summaries 表）
+GET  /api/market/index?from=&to=         大盤指數序列（走勢圖）
+GET  /api/market/institutional?from=&to= 三大法人買賣超序列（柱狀圖）
+GET  /api/glossary                       術語辭典（前端一次載入後 cache）
+GET  /api/meta                           免責文案 + 資料截止日（文案不硬編在前端）
+POST /api/summary/stream                 重新生成摘要，LLM token 逐字推送（SSE）
+GET  /healthz                            compose healthcheck
 ```
 
-1. **抓取** · `internal/market` / `internal/news`
-   TWSE OpenAPI 與 RSS。回傳「解析後結構 + 原始 `json.RawMessage`」兩份。
+**stretch（有時間才做）**：`GET /api/watchlist/daily?date=` — 自選股當日漲跌，直接複用 `digest.Holding`。做了這頁會更飽滿，但成本與報酬率不進 API（§5.3 的紅線同樣適用於 HTTP 出口）。
 
-2. **落地 raw** · `raw_payloads`
-   原始 payload 進 JSONB，唯一鍵 `(source, endpoint, trade_date)`。這是 `reparse` 能重放的原因。
+### 設計原則（沿用 phase-4.md §1）
 
-3. **落地 normalized** · `market_index_daily` / `institutional_daily` / `stock_daily` / `news`
-   全部 upsert。查詢端一律讀這裡，不碰爬蟲。
+- `internal/api` 是**薄的 HTTP 皮**，不含業務邏輯——與 CLI 共用 `digest` / `store`，CLI 和 Web 只是兩個 Deliver 出口。
+- 路由用 **Go 1.22+ `net/http` 的 pattern routing**，不引 chi / gin。端點只有 7 個，標準庫夠用，也少一個要解釋的依賴。
+- 錯誤格式統一 `{"error": {"code": "...", "message": "..."}}`，查無資料回 404 不回空物件。
+- 免責文案由 `/api/meta` 下發，前端不硬編碼。
 
-4. **組 Snapshot** · `internal/report`
-   從 pg 讀當日大盤與三大法人 → `report.Snapshot` → `Fields()` 產出「欄位名 → 真值」對照表。
+### SSE：這頁的技術亮點
 
-5. **LLM 產文（只有佔位符）**
-   prompt 明令「輸出中不可出現任何阿拉伯數字」，只能用 `{欄位名}` 引用。
+```
+event: token   data: {"text": "加"}
+event: token   data: {"text": "權"}
+event: done    data: {"date": "2026-08-11", "provider": "gemini", "model": "..."}
+event: error   data: {"code": "provider_error", "message": "..."}
+```
 
-6. **驗證 + 渲染**
-   `Validate` 檢查佔位符 ∈ 允許欄位集，非法即 reject；通過後程式把真值代入 → 數字永遠是真的。
+**這需要新增 provider 的串流能力**，目前 `llm.Provider` 只有單發的 `Generate`：
 
-7. **落地** · `summaries`
-   唯一鍵 `(trade_date, provider, model)`，同時是 eval 的素材庫與 Phase 4 前端的資料來源。
+```go
+// 新增，與既有 Generate 並存（既有呼叫端零改動）
+type Streamer interface {
+    GenerateStream(ctx context.Context, req GenerateRequest) (<-chan StreamChunk, error)
+}
+type StreamChunk struct {
+    Text string
+    Err  error
+}
+```
 
-> **這個設計的重點**
-> **數字錯誤被結構性消滅**，而不是靠 prompt 拜託 LLM 不要寫錯。LLM 想寫錯數字都做不到——它根本沒有輸出數字的權限。剩下的風險只有兩類：方向曲解（買超被說成賣壓）與紀律違規（出現建議性字眼），這兩類交給 eval 把關。
+**範圍控制**：只實作 **OpenAI-compat adapter**（Gemini / Ollama 共用同一支）的串流。Anthropic adapter 不實作，`serve` 啟動時偵測 provider 是否實作 `Streamer`，沒有就退回「一次生成完再一口氣送一個 token 事件」。介面在、降級路徑清楚，之後補 Anthropic 是加法不是改法。
+
+**防幻覺機制與串流的衝突要處理**：`report.Validate` 是對**完整輸出**做檢查（佔位符合法性、佔位符外不得有數字），串流時無法逐 token 驗證。做法是：
+
+1. 串流過程中推送的是**未代入的原文**（含 `{index_close}` 佔位符）→ 前端即時代入真值顯示
+2. 串流結束後在後端跑完整 `Validate`，失敗則發 `event: error` 並要求前端顯示「本次生成未通過驗證」
+
+**這是這個切片最值得在面試講的設計**：串流體驗與輸出驗證是有張力的，而處理方式是「即時顯示、事後驗證、驗證失敗要讓使用者知道」，不是為了 UX 把防線拿掉。
 
 ---
 
-## 三、資料表
+## 4. 前端：`web/`
 
-| 表 | 用途 | 冪等鍵 |
+```
+web/
+├── src/
+│   ├── App.tsx
+│   ├── main.tsx
+│   ├── store.ts                    Redux store 組裝
+│   ├── api/
+│   │   ├── client.ts               RTK Query createApi（baseQuery + endpoints）
+│   │   └── types.ts                與 Go 回傳對齊的型別（手寫，端點少不用 codegen）
+│   ├── features/summary/
+│   │   ├── SummaryPage.tsx
+│   │   ├── SummaryCard.tsx         摘要卡 + 重新生成按鈕
+│   │   ├── IndexChart.tsx          大盤走勢（Recharts LineChart）
+│   │   └── InstitutionalChart.tsx  三大法人（Recharts BarChart，三色）
+│   ├── components/
+│   │   ├── GlossaryText.tsx        掃描文字比對術語 → 包 Tooltip
+│   │   └── DisclaimerFooter.tsx    文案來自 /api/meta
+│   ├── hooks/useSSE.ts             fetch + ReadableStream 解析 SSE
+│   └── streamSlice.ts              串流中的文字（RTK createSlice，非 server 資料）
+├── tsconfig.json                   strict: true, noUncheckedIndexedAccess: true
+└── vite.config.ts                  proxy /api → localhost:8080
+```
+
+### 頁面內容
+
+- **大盤走勢圖**：近 60 個交易日收盤折線
+- **三大法人柱狀圖**：近 20 日，外資／投信／自營商三色分組
+- **摘要卡**：預設顯示 DB 已生成內容；按「重新生成」走 SSE 逐字打出
+- **術語 tooltip**：文字中的術語加虛線底線，hover 顯示辭典定義（教學感的核心互動）
+- **日期選擇器**：AntD DatePicker，回看歷史摘要；無資料的日期給明確空狀態，不是空白頁
+- **免責 footer**：文案由 API 下發
+
+### 型別紀律（TS 的展示重點）
+
+- `tsconfig` 開 `strict` + `noUncheckedIndexedAccess`
+- **API 回傳型別集中在 `api/types.ts`**，與 Go struct 的 JSON tag 一一對應；欄位可為 null 的（例如 `stock_daily` 的 OHLC）在 TS 端就是 `number | null`，強迫呼叫端處理
+- 不用 `any`。真的需要逃生口時用 `unknown` + 型別守衛
+
+### `useSSE` — 唯一需要單元測試的前端邏輯
+
+`EventSource` 不支援 POST，所以要自己用 `fetch` + `ReadableStream` 解析。這個 hook 要處理：跨 chunk 的半行、`event:` 與 `data:` 的配對、`[DONE]`、中途 abort。用 Vitest 餵預錄的 byte stream 測，含**故意把事件切在半行的 chunk 邊界**——那是這類解析最常見的 bug。
+
+---
+
+## 5. 容器化與 CI
+
+沿用 [phase-4.md §3](phase-4.md) 的 multi-stage Dockerfile（前端 build → Go build → distroless），前端 `dist` 用 `go:embed` 塞進 binary，部署物只有一個執行檔。
+
+compose 加 `app` service（`serve` 指令），與既有 pg/redis 並存。
+
+CI（GitHub Actions）最小集：
+
+```
+backend:  go vet + go test ./...
+frontend: npm ci + tsc --noEmit + npm run build + vitest run
+```
+
+eval gate 留給 Phase 4 完整版。
+
+---
+
+## 6. 一週排程（全職投入，約 40–45h）
+
+| 天 | 內容 | 時數 |
 | --- | --- | --- |
-| `raw_payloads` | 原始 API 回應（審計 + 重解析） | `(source, endpoint, trade_date)` |
-| `market_index_daily` | 大盤指數／成交量值 | `trade_date` |
-| `institutional_daily` | 三大法人買賣超（全市場總額） | `(trade_date, actor)` |
-| `stock_daily` | 個股日K（全市場） | `(symbol, trade_date)` |
-| `news` | 財金新聞 | `url` |
-| `summaries` | LLM 摘要產出 | `(trade_date, provider, model)` |
-| `eval_runs` | eval 執行紀錄與 pass rate | — |
-| `eval_case_results` | 逐案結果（FK → `eval_runs`） | — |
+| **D1** | `internal/api` 骨架 + 5 個 REST 端點 + `httptest` 測試 + `serve` 指令 | 8h |
+| **D2** | `llm.Streamer` 介面 + OpenAI-compat 串流實作 + SSE 端點 + 事件序列測試 | 8h |
+| **D3** | Vite + React + TS + AntD 版面骨架；RTK Query 串通 REST；兩張圖表出來 | 8h |
+| **D4** | `useSSE` hook + Vitest 測試 + 摘要卡逐字生成 + 串流後驗證失敗的顯示 | 8h |
+| **D5** | 術語 tooltip、日期選擇器、空狀態、免責 footer、RWD 檢查 | 6h |
+| **D6** | Dockerfile + `go:embed` + compose app service + GitHub Actions | 5h |
+| **D7** | README（架構圖 + 截圖 + 啟動步驟）、`/code-review` 一輪、修 review findings | 5h |
 
-`CREATE EXTENSION vector` 已在 `001_init.sql` 開啟——Phase 3 加向量欄位時零遷移。
+**先砍的順序**（時間不夠時）：CI → 日期選擇器 → 三大法人圖 → 術語 tooltip。
+**絕對不砍**：SSE 串流、TS strict、Docker。這三個是這份作品的差異化來源。
 
 ---
 
-## 四、CLI 指令
+## 7. Definition of Done
 
-| 指令 | 作用 |
+- [ ] `docker compose up -d` 一鍵起 pg + redis + app，`/healthz` 通
+- [ ] 瀏覽器打開看得到：走勢圖、法人柱狀圖、摘要、術語 tooltip、日期回看
+- [ ] 「重新生成」按鈕逐字打出摘要，且串流結束後有跑完整 `Validate`
+- [ ] `tsc --noEmit` 零錯誤，全專案無 `any`
+- [ ] `useSSE` 有測試，含 chunk 切在半行的情境
+- [ ] `internal/api` 有 `httptest` 測試，含 SSE 事件序列與錯誤格式
+- [ ] GitHub Actions backend + frontend 皆綠
+- [ ] README 有架構圖與截圖，陌生人照著能在本機跑起來
+
+---
+
+## 8. 與求職的對應（誠實版）
+
+這個切片能覆蓋的與不能覆蓋的：
+
+| JD 要求 | 這個切片 |
 | --- | --- |
-| `daily-stock schedule` | 長駐排程（平日 17:30 抓資料、18:30 生成摘要、每 30 分抓新聞） |
-| `daily-stock ingest` | 手動抓當日市場資料 |
-| `daily-stock news` | 手動抓一輪新聞 |
-| `daily-stock backfill --symbol 2330 --from 2026-01 [--to 2026-06]` | 回補個股歷史（按月分頁） |
-| `daily-stock summary [--date 2026-08-07]` | 生成／重生成某日摘要（預設 DB 內最新交易日） |
-| `daily-stock eval` | 跑 golden set，結果落 `eval_runs` |
-| `daily-stock reparse` | 重放 `raw_payloads`（解析修復後用，不重爬） |
+| React | ✅ 實際寫的 SPA，含圖表、串流、tooltip |
+| TypeScript | ✅ strict 模式，型別與後端對齊 |
+| Redux | ✅ RTK Query + 一個 slice，且能講出選型理由 |
+| Ant Design | ✅ 版面與元件 |
+| Postgres | ✅ 既有的雙層資料建模、goose migrations、upsert 冪等 |
+| Docker | ✅ multi-stage + compose |
+| **Python 後端** | ❌ **這個專案是 Go**。面試時用過去的 Python 專案回答，不要假裝這個是 |
+| 影音編碼 / RTMP / HLS | ❌ 沒有（JD 標 `is a plus`）。但 SSE streaming 至少證明對串流協定與即時資料流不陌生 |
 
----
-
-## 五、怎麼測試
-
-### 1. 單元測試（不需要 DB 或 API key）
-
-```bash
-go test ./...
-```
-
-目前 `eval` / `market` / `news` / `report` 四包通過。`market` 的測試特別涵蓋民國年日期解析與非交易日空回應——那是最容易錯的地方。
-
-### 2. 起基礎設施
-
-```bash
-docker compose up -d      # pg(pgvector) + redis
-docker compose ps         # 確認 healthy
-```
-
-### 3. 設定 .env
-
-用 Gemini 的話：
-
-```bash
-LLM_PROVIDER=gemini
-GEMINI_API_KEY=<你的 key>
-GEMINI_MODEL=gemini-2.5-flash
-```
-
-未設 `REDIS_ADDR` 也能跑，lock 與 rate limit 會降為 no-op（啟動時會 log 出來）。
-
-### 4. 抓資料並驗證落地
-
-```bash
-go run ./cmd/daily-stock ingest
-```
-
-log 應出現 `[ingest] market 完成：index=N 日, institutional=true, stocks=NNNN 檔`。接著查 DB：
-
-```bash
-docker compose exec db psql -U stock -d stock -c "
-  SELECT trade_date, close, change FROM market_index_daily ORDER BY trade_date DESC LIMIT 5;
-  SELECT * FROM institutional_daily ORDER BY trade_date DESC LIMIT 3;
-  SELECT count(*) FROM stock_daily;"
-```
-
-把 `close` / `change` 對照 TWSE 官網當日數字——這是驗證解析正確性最直接的方法。
-
-### 5. 驗冪等（Phase 1 的核心承諾）
-
-```bash
-docker compose exec db psql -U stock -d stock -c "SELECT count(*) FROM stock_daily;"
-go run ./cmd/daily-stock ingest      # 再跑一次
-docker compose exec db psql -U stock -d stock -c "SELECT count(*) FROM stock_daily;"
-```
-
-兩次 count 必須相同。
-
-### 6. 新聞去重
-
-```bash
-go run ./cmd/daily-stock news    # 第一次：抓 N 則、新增 N 則
-go run ./cmd/daily-stock news    # 第二次：抓 N 則、新增 0 則 ← url 去重生效
-```
-
-### 7. 生成摘要（會呼叫 LLM，燒 token）
-
-```bash
-go run ./cmd/daily-stock summary
-go run ./cmd/daily-stock summary --date 2026-08-07
-```
-
-> **最重要的驗證**
-> 輸出裡的**每一個數字**都必須與步驟 4 查到的 DB 值完全一致。任何一個對不上，代表模板代入機制破了——那是 M7 信任防線的核心，比摘要文筆重要得多。
-
-### 8. reparse 與 backfill
-
-```bash
-go run ./cmd/daily-stock reparse
-go run ./cmd/daily-stock backfill --symbol 2330 --from 2026-05
-```
-
-> **注意**
-> 未設 `REDIS_ADDR` 時 **backfill 沒有 rate limit 保護**。回補大範圍前先把 Redis 設好，否則有被 TWSE 擋的風險——被 ban 整條管線都會停擺。
-
-### 9. eval
-
-```bash
-go run ./cmd/daily-stock eval
-```
-
-逐案印 ✅/❌ 與 pass rate，結果落 `eval_runs`。20 組都走完整 LLM 呼叫，換 provider 或改 prompt 後要重跑比較。
-
-### 10. 排程
-
-```bash
-go run ./cmd/daily-stock schedule
-```
-
-會停在 `[schedule] 排程啟動…`，但平日 17:30 / 18:30 才觸發，當下只會看到啟動 log 與每 30 分鐘的 news job。想立刻驗證觸發邏輯，把 `internal/scheduler/scheduler.go` 第 63–64 行的 cron spec 暫時改成 `*/2 * * * *`，確認 job 有跑、lock 有生效，測完改回來。
-
----
-
-## 六、已知落差
-
-| 項目 | 說明 | 處理 |
-| --- | --- | --- |
-| `internal/store` 無測試 | testcontainers 起真 pg 驗 upsert 冪等與 migration 可重放，是 DoD 項目但尚未實作 | ✅ 已於 Phase 1.5 週 2 前補上 |
-| README demo 輸出與排程 log 截圖 | DoD 項目 | Phase 1.5 週 3 |
-| 摘要不含個股 | `stock_daily` 已落地全市場資料，但摘要只涵蓋大盤與法人總額 | Phase 1.5 主題 |
-| 個股層級三大法人 | 目前只有 `BFI82U` 全市場總額，個股需 `T86` 端點 | Phase 1.5 週 2 |
-| 未還原股價 | TWSE 回的是未還原價，除權息日會出現假跳空 | Phase 1.5 週 3 |
-| Kafka 事件 | `ENABLE_KAFKA` 已在 config 預留，尚未接線 | Phase 3 才需要 |
-
----
-
-## 七、下一步
-
-Phase 1.5 — 自選股每日追蹤（自用版）：watchlist 持倉、個股三大法人（T86）、除權息還原、描述性統計、Discord 推播。三週垂直切片，規格見 `docs/phase-1.5.md`；暫緩項目與重啟條件見 `docs/BACKLOG.md`。
-
----
-
-本專案僅供個人學習與回測研究使用，不對外提供服務。所有產出均為研究與教育性質，**非投資建議**，不構成任何買賣邀約。
+**不要誇大**。這份作品能證明的是「React + TS + Redux 寫得出來」與「工程紀律」，不是「我有三年 React 經驗」。面試時把它定位成「近期為了補齊前端而做的實作」，誠實反而加分——對方會看你**怎麼學**，而不只是看你會什麼。
 
 </script>
 

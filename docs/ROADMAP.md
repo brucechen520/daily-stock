@@ -28,6 +28,8 @@ AI 台股盤後分析工具。輸入台股資料（大盤、三大法人籌碼�
 
 ## 模組
 
+> 這是**含未來 phase 的規劃表**，不是現況。括號標 Phase 的 package 尚未建立；現況以 [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §6 完成度為準。
+
 | package | 職責 |
 | --- | --- |
 | `internal/store` | pgx 連線池 + goose migrations + repository（upsert 冪等）|

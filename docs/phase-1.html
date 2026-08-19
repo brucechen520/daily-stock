@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Phase 1 — 盤後白話摘要 MVP 完成報告 — daily-stock</title>
+<title>Phase 1 — 盤後白話摘要 MVP（自動抓取 + Postgres 落地） — daily-stock</title>
 <style>
 :root {
   --bg:#ffffff; --bg-soft:#f6f8fa; --bg-sink:#eaeef2;
@@ -167,14 +167,14 @@ pre.mermaid svg{max-width:100%;height:auto}
   <aside id="sidebar">
     <div class="brand">
       <div class="kicker">daily-stock</div>
-      <div class="name">Phase 1 — 盤後白話摘要 MVP 完成報告</div>
+      <div class="name">Phase 1 — 盤後白話摘要 MVP（自動抓取 + Postgres 落地）</div>
     </div>
     <nav class="doc-switch">
       <a href="../ARCHITECTURE.html" title="架構"><span class="num">00</span><span>架構</span></a>
       <a href="ROADMAP.html" title="daily-stock — 全 Phase Roadmap"><span class="num">01</span><span>全 Phase Roadmap</span></a>
       <a href="phase-0-prd.html" title="Phase 0 — 產品需求規格書（PRD）"><span class="num">02</span><span>Phase 0 — PRD</span></a>
-      <a href="phase-1.html" title="Phase 1 — 盤後白話摘要 MVP（自動抓取 + Postgres 落地）"><span class="num">03</span><span>Phase 1 — 盤後白話摘要</span></a>
-      <a class="current" href="phase-1-report.html" title="Phase 1 — 盤後白話摘要 MVP 完成報告"><span class="num">04</span><span>Phase 1 完成報告</span></a>
+      <a class="current" href="phase-1.html" title="Phase 1 — 盤後白話摘要 MVP（自動抓取 + Postgres 落地）"><span class="num">03</span><span>Phase 1 — 盤後白話摘要</span></a>
+      <a href="phase-1-report.html" title="Phase 1 — 盤後白話摘要 MVP 完成報告"><span class="num">04</span><span>Phase 1 完成報告</span></a>
       <a href="phase-1.5.html" title="Phase 1.5 — 自選股每日追蹤（自用版）"><span class="num">05</span><span>Phase 1.5 — 自選股追蹤</span></a>
       <a href="phase-2.html" title="Phase 2 — 技術指標 + 訊號引擎 + 回測方法論"><span class="num">06</span><span>Phase 2 — 訊號與回測</span></a>
       <a href="phase-3.html" title="Phase 3 — 新聞 RAG + 個股問答 Agent"><span class="num">07</span><span>Phase 3 — RAG 與問答</span></a>
@@ -196,235 +196,328 @@ pre.mermaid svg{max-width:100%;height:auto}
 <button id="menu-toggle" aria-label="開關目錄">☰</button>
 
 <script id="md-src" type="text/plain">
-# Phase 1 — 盤後白話摘要 MVP 完成報告
+# Phase 1 — 盤後白話摘要 MVP（自動抓取 + Postgres 落地）
 
-> 自動資料管線（TWSE 行情／三大法人／個股日K／新聞 RSS → Postgres）+ 模板代入防幻覺的 LLM 白話摘要 + 輸出忠實度 eval harness。本階段**不產生任何買賣訊號**。
->
-> 本報告是 **Phase 1 交付當下（commit `34a453a`）的凍結快照**，下方統計數字不隨後續 phase 更新。現況請看 [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §6 完成度與 [`phase-1.5.md`](phase-1.5.md) §6 里程碑。
+## 目標
 
-| 指標 | 數字 |
-| --- | --- |
-| CLI 子指令 | 7 |
-| 資料表 | 8 |
-| eval golden case | 20 |
-| 術語辭典詞彙 | 12 |
-| LLM provider | 3 |
-| Go 行數 | 2,689 |
+**全自動資料管線 + LLM 白話摘要**：排程器每日自動抓 TWSE 大盤指數、三大法人買賣超、個股日K與財金新聞，**直接落地 PostgreSQL**（不經手動、不落散裝檔案），再由 LLM 生成白話解讀 + 術語註解。**不產生任何買賣訊號**。
+
+同時建立三個地基，後面每個 phase 都踩在上面：
+
+1. **Postgres 為唯一真相來源**：day 1 就用 pgvector image，Phase 3 加向量欄位零遷移；Phase 2 回測直接查歷史表。
+2. **Provider 可切換**：`llm.Provider` 介面，Claude / Ollama config 一行切。
+3. **輸出忠實度 eval**：把 LLM 當不完全可信元件管理的驗證機制。
+
+## 產出範例（示意）
+
+```
+📊 2026-08-07 盤後摘要
+
+大盤：加權指數收 22,150 點，漲 85 點（+0.39%）
+→ 白話：今天大盤小漲，屬於溫和整理格局，沒有明顯方向性表態。
+
+三大法人：外資買超 32 億元，投信賣超 5 億元
+→ 白話：外資站買方，是短線偏多的訊號之一，但投信同步賣超，
+   顯示法人對後市看法不完全一致。
+
+【術語小教室】
+買超/賣超：指法人當日買進金額扣掉賣出金額後的淨額。
+
+⚠️ 以上內容僅供學習與理解市場動態使用，非投資建議。
+```
 
 ---
 
-## 一、已完成功能
+## 1. 基礎設施：docker-compose（Phase 1 就建，infra only）
 
-| 功能 | 實作位置 | 說明 | 狀態 |
+**原則：compose 只裝基礎設施，app 本體開發期在 host 用 `go run` 跑**（迭代快）；app 容器化留給 Phase 4。
+
+```yaml
+# docker-compose.yaml
+services:
+  db:
+    image: pgvector/pgvector:pg17          # day 1 就用 pgvector image，Phase 3 免換
+    environment:
+      POSTGRES_USER: stock
+      POSTGRES_PASSWORD: devpass_change_me # 換成你自己的
+      POSTGRES_DB: stock
+    ports: ["127.0.0.1:5432:5432"]         # 只綁本機
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stock"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    command: redis-server --requirepass devpass_change_me --maxmemory 128mb --maxmemory-policy allkeys-lru
+    ports: ["127.0.0.1:6379:6379"]
+
+  # --- 以下 profile 隔開，用到才起 ---
+
+  kafka:                                    # profile: pipeline（見 §2 kafka 的角色）
+    image: apache/kafka:3.9                 # KRaft 單 broker
+    profiles: ["pipeline"]
+    ports: ["127.0.0.1:9092:9092"]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://:29092,CONTROLLER://:29093,HOST://:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  ollama:                                   # profile: local-llm，地端模型
+    image: ollama/ollama
+    profiles: ["local-llm"]
+    ports: ["127.0.0.1:11434:11434"]
+    volumes: [ollama:/root/.ollama]
+
+volumes:
+  pgdata:
+  ollama:
+```
+
+```bash
+docker compose up -d                        # 日常：pg + redis
+docker compose --profile local-llm up -d    # 要用 Ollama 時
+docker compose --profile pipeline up -d     # 要練 kafka 事件管線時
+```
+
+### 各元件在本專案的角色（誠實版）
+
+| 元件 | 角色 | 必要性 |
+| --- | --- | --- |
+| **Postgres(pgvector)** | 唯一真相來源：原始 payload、正規化行情、新聞、摘要、eval 結果 | **必要** |
+| **Redis** | 經 [rediskit](https://github.com/brucechen520/go-redis-kit)：對外 API 的 rate limit（防被 TWSE ban）、排程分散式鎖（多實例防重抓）、glossary/摘要 cache | 建議（吃自己狗糧） |
+| **Kafka** | 經 kafkakit：ingestion 完成後發 `raw.ingested` 事件，Phase 3 的 embedding worker 當 consumer 解耦消費 | **可選**。單機批次抓取其實用不到，放進來是為了練 kafkakit + 預留 Phase 3 解耦；core path 不依賴它（feature flag 控制發不發事件） |
+| **Ollama** | 地端 LLM 對照組 | 可選 |
+
+> 誠實原則延續：不假裝 kafka 是必需品。它的教學價值 > 工程必要性，文件講明白，面試被問「為什麼用 kafka」時答案是「事件解耦的預留 + 練習」，不是硬拗。
+
+---
+
+## 2. 資料管線：爬蟲 → Postgres
+
+### 2.1 資料源與抓取方式
+
+| 資料 | 端點 | 頻率 | 注意 |
 | --- | --- | --- | --- |
-| Postgres + 自動 migration | `store.New` → `goose.Up` | migrations 以 `go:embed` 打包進 binary，任何指令啟動時自動建表，無須手動 migrate | ✅ 完成 |
-| 抓大盤成交資訊 | TWSE OpenAPI `FMTQIK` | 回傳**整月**每日資料 → 漏抓幾天會自動補回 | ✅ 完成 |
-| 抓三大法人買賣超 | TWSE OpenAPI `BFI82U` | 全市場總額（外資／投信／自營商），無個股層級 | ✅ 完成 |
-| 抓全市場個股日K | TWSE OpenAPI `STOCK_DAY_ALL` | 只回當日，一次全市場 1000+ 檔 | ✅ 完成 |
-| 個股歷史回補 | RWD `STOCK_DAY`，按月分頁 | `backfill --symbol 2330 --from 2026-05` | ✅ 完成 |
-| 財金新聞抓取 | RSS（預設自由時報財經） | `url` 唯一鍵去重；`ExtractSymbols` 抽「台積電(2330)」括號代號 | ✅ 完成 |
-| raw + normalized 雙層 | `raw_payloads` 表 | 原始 payload 全存 → `reparse` 可重放解析，解析 bug 修完不用重爬 | ✅ 完成 |
-| 冪等寫入 | 全部 `ON CONFLICT DO UPDATE` | 同日重跑任意次結果相同——排程重試與手動補抓都安全 | ✅ 完成 |
-| LLM 白話摘要 | `report.Generate` | 模板代入：LLM 只准輸出 `{欄位}` 佔位符，**一個數字都不准寫** | ✅ 完成 |
-| Provider 可切換 | `llm.Provider` 介面 | Anthropic ／ Gemini ／ Ollama；Gemini 與 Ollama 共用 OpenAI-compat adapter | ✅ 完成 |
-| 術語辭典 | `glossary/terms.yaml` | 12 詞（DoD 要求 ≥ 10） | ✅ 完成 |
-| eval harness | `eval/cases.yaml` | 20 組 golden case，結果落 `eval_runs` / `eval_case_results` | ✅ 完成 |
-| 長駐排程器 | `robfig/cron`（Asia/Taipei） | 平日 17:30 ingest（重試 3 次／間隔 10 分）、18:30 summary、每 30 分 news；每個 job 包 redis 分散式鎖 | ✅ 完成 |
-| 出站速率限制 | rediskit `RateLimiter` | Redis 未設定時降為 no-op（啟動時 log 提示） | ✅ 完成 |
+| 大盤成交資訊 | TWSE OpenAPI `/v1/exchangeReport/FMTQIK` | 每交易日盤後 | 回傳當月每日：指數、成交量值、漲跌 |
+| 三大法人買賣金額 | TWSE OpenAPI `/v1/fund/BFI82U` | 每交易日盤後 | 外資/投信/自營商買賣超 |
+| 個股日K（全市場） | TWSE OpenAPI `/v1/exchangeReport/STOCK_DAY_ALL` | 每交易日盤後 | **只回當日**，一次全市場，落地後過濾 watchlist |
+| 個股歷史回補 | `www.twse.com.tw/exchangeReport/STOCK_DAY?date=&stockNo=` | backfill 一次性 | 按「股票×月」分頁抓，配 rate limit 慢慢補 |
+| 財金新聞 | 鉅亨 / 經濟日報 RSS | 每 30 分鐘 | Phase 1 只**抓取落地**（存 `news` 表）；chunk/embedding/檢索是 Phase 3 |
 
----
+**TWSE OpenAPI 的關鍵現實**：多數端點**只回最新交易日、沒有歷史查詢參數**。所以「每天準時抓、抓了就存」不是優化而是必需——歷史資料是自己日積月累存出來的。這正是 day 1 就上 Postgres 的理由；漏抓一天 = 那天資料要走 backfill 路徑補。
 
-## 二、資料流
+### 2.2 Schema（migrations 用 goose，SQL 檔進版控）
 
-```mermaid
-flowchart TD
-    A["1. 抓取<br/>internal/market · internal/news"] --> B["2. 落地 raw<br/>raw_payloads (JSONB)"]
-    B --> C["3. 落地 normalized<br/>market_index_daily · institutional_daily<br/>stock_daily · news"]
-    C --> D["4. 組 Snapshot<br/>internal/report"]
-    D --> E["5. LLM 產文<br/>只允許輸出佔位符"]
-    E --> F["6. 驗證 + 渲染<br/>Validate → 代入真值"]
-    F --> G["7. 落地<br/>summaries"]
-    B -. reparse 重放 .-> C
+**兩層設計：raw 層存原始 payload（審計 + 重解析），normalized 層給查詢**：
+
+```sql
+-- 001_init.up.sql
+CREATE EXTENSION IF NOT EXISTS vector;      -- Phase 3 會用，先開
+
+-- raw 層：原始回應全存，解析邏輯改了可以重放，不用重新爬
+CREATE TABLE raw_payloads (
+    id         BIGSERIAL PRIMARY KEY,
+    source     TEXT NOT NULL,               -- 'twse' / 'cnyes-rss' / ...
+    endpoint   TEXT NOT NULL,
+    trade_date DATE,
+    payload    JSONB NOT NULL,
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (source, endpoint, trade_date)   -- 冪等鍵：重抓同日覆寫
+);
+
+-- normalized 層
+CREATE TABLE market_index_daily (
+    trade_date DATE PRIMARY KEY,
+    close      NUMERIC(10,2) NOT NULL,
+    change     NUMERIC(10,2) NOT NULL,
+    volume     BIGINT NOT NULL,             -- 成交股數
+    amount     BIGINT NOT NULL              -- 成交金額
+);
+
+CREATE TABLE institutional_daily (
+    trade_date  DATE NOT NULL,
+    actor       TEXT NOT NULL,              -- 'foreign' / 'trust' / 'dealer'
+    buy_amount  BIGINT NOT NULL,            -- 元
+    sell_amount BIGINT NOT NULL,
+    net_amount  BIGINT NOT NULL,
+    PRIMARY KEY (trade_date, actor)
+);
+
+CREATE TABLE stock_daily (
+    symbol     TEXT NOT NULL,
+    trade_date DATE NOT NULL,
+    open  NUMERIC(10,2), high NUMERIC(10,2),
+    low   NUMERIC(10,2), close NUMERIC(10,2),
+    volume BIGINT,
+    PRIMARY KEY (symbol, trade_date)
+);
+
+-- 新聞（Phase 3 的 news_chunks 會 FK 到這裡）
+CREATE TABLE news (
+    id           BIGSERIAL PRIMARY KEY,
+    source       TEXT NOT NULL,
+    url          TEXT NOT NULL UNIQUE,      -- 去重鍵
+    title        TEXT NOT NULL,
+    body         TEXT NOT NULL,
+    published_at TIMESTAMPTZ NOT NULL,
+    symbols      TEXT[] DEFAULT '{}',
+    fetched_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- LLM 產出也落地（Phase 4 前端讀這裡；也是 eval 的素材庫）
+CREATE TABLE summaries (
+    id         BIGSERIAL PRIMARY KEY,
+    trade_date DATE NOT NULL,
+    provider   TEXT NOT NULL,               -- 'anthropic' / 'ollama'
+    model      TEXT NOT NULL,
+    content    TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (trade_date, provider, model)
+);
 ```
 
-1. **抓取** · `internal/market` / `internal/news`
-   TWSE OpenAPI 與 RSS。回傳「解析後結構 + 原始 `json.RawMessage`」兩份。
+**冪等鐵律**：所有寫入走 `INSERT ... ON CONFLICT ... DO UPDATE`。同一天重跑 ingest 任意次結果相同——排程重試、手動補抓都不會產生重複資料。
 
-2. **落地 raw** · `raw_payloads`
-   原始 payload 進 JSONB，唯一鍵 `(source, endpoint, trade_date)`。這是 `reparse` 能重放的原因。
+### 2.3 排程：`daily-stock schedule`（長駐程序，不靠手動）
 
-3. **落地 normalized** · `market_index_daily` / `institutional_daily` / `stock_daily` / `news`
-   全部 upsert。查詢端一律讀這裡，不碰爬蟲。
+```
+17:30 平日   ingest market   抓大盤 + 法人 + 全市場日K → upsert pg
+             （TWSE 盤後資料 ~17:00 後才完整，17:30 起跑 + 失敗重試三次、間隔 10 分鐘）
+18:30 平日   generate        當日摘要生成 → summaries 表
+*/30 全週    ingest news     RSS 拉新聞 → url 去重 upsert
+```
 
-4. **組 Snapshot** · `internal/report`
-   從 pg 讀當日大盤與三大法人 → `report.Snapshot` → `Fields()` 產出「欄位名 → 真值」對照表。
+- 用 `robfig/cron` in-process，不引入外部排程系統。
+- **rediskit Locker 包每個 job**（`lock:ingest-market`）：未來多實例部署不重抓；單機時也是免費保險。
+- 非交易日：TWSE 回空資料 → 記 log 跳過，不算失敗。
+- 手動指令並存（backfill、補跑、debug 用）：
 
-5. **LLM 產文（只有佔位符）**
-   prompt 明令「輸出中不可出現任何阿拉伯數字」，只能用 `{欄位名}` 引用。
+```bash
+daily-stock ingest --date 2026-08-07          # 手動補某日
+daily-stock backfill --symbol 2330 --from 2025-01   # 歷史回補（走 STOCK_DAY 月分頁）
+daily-stock summary --date 2026-08-07          # 生成摘要（讀 pg，不現抓）
+daily-stock schedule                           # 長駐排程器
+```
 
-6. **驗證 + 渲染**
-   `Validate` 檢查佔位符 ∈ 允許欄位集，非法即 reject；通過後程式把真值代入 → 數字永遠是真的。
+### 2.4 對外請求紀律
 
-7. **落地** · `summaries`
-   唯一鍵 `(trade_date, provider, model)`，同時是 eval 的素材庫與 Phase 4 前端的資料來源。
+- **rate limit**：rediskit `RateLimiter` 包所有 TWSE/RSS 出站呼叫（如 3 req/s），backfill 尤其要慢——被 ban 整條管線停擺。
+- **cache**：同日重複查詢直接命中 pg，不重打 API（`raw_payloads` 的 UNIQUE 鍵就是判斷依據）。
+- **User-Agent 表明身分**、遵守 robots.txt（新聞）、不整篇轉存展示（版權紀律見 ROADMAP）。
 
-> **這個設計的重點**
-> **數字錯誤被結構性消滅**，而不是靠 prompt 拜託 LLM 不要寫錯。LLM 想寫錯數字都做不到——它根本沒有輸出數字的權限。剩下的風險只有兩類：方向曲解（買超被說成賣壓）與紀律違規（出現建議性字眼），這兩類交給 eval 把關。
+### 2.5 Kafka 事件（可選，feature flag）
 
----
+```
+ingest 完成 → kafkakit Producer 發 raw.ingested {source, trade_date, table, count}
+```
 
-## 三、資料表
-
-| 表 | 用途 | 冪等鍵 |
-| --- | --- | --- |
-| `raw_payloads` | 原始 API 回應（審計 + 重解析） | `(source, endpoint, trade_date)` |
-| `market_index_daily` | 大盤指數／成交量值 | `trade_date` |
-| `institutional_daily` | 三大法人買賣超（全市場總額） | `(trade_date, actor)` |
-| `stock_daily` | 個股日K（全市場） | `(symbol, trade_date)` |
-| `news` | 財金新聞 | `url` |
-| `summaries` | LLM 摘要產出 | `(trade_date, provider, model)` |
-| `eval_runs` | eval 執行紀錄與 pass rate | — |
-| `eval_case_results` | 逐案結果（FK → `eval_runs`） | — |
-
-`CREATE EXTENSION vector` 已在 `001_init.sql` 開啟——Phase 3 加向量欄位時零遷移。
+Phase 1 只發不消費（觀察用）；Phase 3 的 embedding worker 訂閱 `raw.ingested`（source=news）觸發 chunk+embed，取代輪詢。`ENABLE_KAFKA=false` 時整段跳過,core path 零依賴。
 
 ---
 
-## 四、CLI 指令
+## 3. 子模組拆解
 
-| 指令 | 作用 |
+| package | 職責 |
 | --- | --- |
-| `daily-stock schedule` | 長駐排程（平日 17:30 抓資料、18:30 生成摘要、每 30 分抓新聞） |
-| `daily-stock ingest` | 手動抓當日市場資料 |
-| `daily-stock news` | 手動抓一輪新聞 |
-| `daily-stock backfill --symbol 2330 --from 2026-01 [--to 2026-06]` | 回補個股歷史（按月分頁） |
-| `daily-stock summary [--date 2026-08-07]` | 生成／重生成某日摘要（預設 DB 內最新交易日） |
-| `daily-stock eval` | 跑 golden set，結果落 `eval_runs` |
-| `daily-stock reparse` | 重放 `raw_payloads`（解析修復後用，不重爬） |
+| `internal/store` | pgx 連線池 + goose migrations + 各表的 repository（upsert 語意） |
+| `internal/market` | `MarketDataProvider` 介面 + TWSE client（真實爬取）+ MockClient（測試） |
+| `internal/news` | RSS 抓取 + 清洗 + `news` 表落地（chunk/embed 留 Phase 3） |
+| `internal/scheduler` | cron 註冊 + rediskit lock 包裝 + 重試 |
+| `internal/llm` | `Provider` 介面 + Anthropic / Ollama adapter + factory |
+| `internal/report` | 讀 pg 當日資料 → 模板 + LLM 解讀 → `summaries` 落地 |
+| `internal/glossary` | 術語辭典（YAML）+ 註解 |
+| `internal/eval` | 輸出忠實度 eval harness |
+
+### `internal/market` 介面（改為讀寫分離：抓是抓、查是查）
+
+```go
+// 抓取端：爬蟲實作，回原始 + 解析後結構
+type Fetcher interface {
+    FetchIndexDaily(ctx context.Context) (*IndexData, json.RawMessage, error)
+    FetchInstitutional(ctx context.Context) ([]InstitutionalData, json.RawMessage, error)
+    FetchAllStockDaily(ctx context.Context) ([]StockDaily, json.RawMessage, error)
+}
+// 查詢端：report/signal/api 都從 pg 查，不碰爬蟲
+// （直接用 internal/store 的 repository，不再抽一層 interface）
+```
+
+`json.RawMessage` 就是進 `raw_payloads` 的原始 payload——**解析 bug 修了之後可以 `daily-stock reparse` 重放,不用重爬**。
+
+### `internal/llm` — Provider 介面
+
+```go
+type Provider interface {
+    Generate(ctx context.Context, req GenerateRequest) (*GenerateResponse, error)
+}
+type GenerateRequest struct {
+    SystemPrompt string
+    UserPrompt   string
+    MaxTokens    int
+}
+```
+
+（Phase 3 會擴充 `Messages` + `Tools`,先留單輪。）
+
+### `internal/report` — 防幻覺:數字不讓 LLM 寫
+
+**模板代入法**:LLM 產生「引用欄位的解讀文」,數字由程式代入,想寫錯都寫不了:
+
+```
+LLM 輸出:「外資買超 {foreign_net} 億元，顯示…」   ← 只准寫佔位符
+渲染層:  程式把 pg 查出的真值填進 {foreign_net}    ← 數字永遠是真的
+驗證:    佔位符必須 ∈ 已知欄位集,否則 reject 重生成
+```
+
+Prompt 骨架:
+
+```
+你是台股市場的說明員。以下欄位代表今日真實數據,生成解讀時**只能用 {欄位名} 佔位符引用數值,
+不可自行寫出任何數字**。
+可用欄位:{index_close} {index_change} {index_change_pct} {foreign_net} {trust_net} {dealer_net}
+規則:1) 不可給買賣建議,只解釋現象 2) 資料缺失就寫「今日無相關資料」 3) 至少教學一個術語
+```
+
+### `internal/eval` — 輸出忠實度驗證
+
+- 模板方案讓「數字錯」被結構性消滅,eval 聚焦剩下兩類:
+  1. **方向曲解**(買超 32 億被解讀成「賣壓沉重」):LLM-as-judge + rubric,judge prompt 進版控
+  2. **紀律違規**(出現建議性字眼):黑名單詞程式斷言
+- Golden set 20–30 組存 repo(YAML),`daily-stock eval` 可重跑,結果落 `eval_runs` 表(Phase 4 儀表板用)
+- 改 prompt / 換 provider 必重跑,記 pass rate
 
 ---
 
-## 五、怎麼測試
+## 4. 測試策略
 
-### 1. 單元測試（不需要 DB 或 API key）
+- `internal/store`:**testcontainers-go 起真 pg** 測 upsert 冪等(同日寫兩次結果相同)、migration 可重放
+- `internal/market`:`httptest` 假 TWSE server 餵**錄下來的真實 response fixture**(含非交易日空回應、格式怪異的民國年日期——TWSE 用民國年,解析要專門測)
+- `internal/news`:髒 HTML 清洗對答案;url 去重
+- `internal/scheduler`:注入假 clock 測觸發時間;lock 被持有時跳過不重抓
+- `internal/llm`:`httptest` 假 API server,不燒額度
+- `internal/report`:模板代入正確性(佔位符全被真值替換、非法佔位符被 reject)
+- `internal/eval`:黑名單斷言邏輯本身的單元測試
 
-```bash
-go test ./...
-```
+## 5. Phase 1 完成的定義(Definition of Done)
 
-目前 `eval` / `market` / `news` / `report` 四包通過。`market` 的測試特別涵蓋民國年日期解析與非交易日空回應——那是最容易錯的地方。
-
-### 2. 起基礎設施
-
-```bash
-docker compose up -d      # pg(pgvector) + redis
-docker compose ps         # 確認 healthy
-```
-
-### 3. 設定 .env
-
-用 Gemini 的話：
-
-```bash
-LLM_PROVIDER=gemini
-GEMINI_API_KEY=<你的 key>
-GEMINI_MODEL=gemini-2.5-flash
-```
-
-未設 `REDIS_ADDR` 也能跑，lock 與 rate limit 會降為 no-op（啟動時會 log 出來）。
-
-### 4. 抓資料並驗證落地
-
-```bash
-go run ./cmd/daily-stock ingest
-```
-
-log 應出現 `[ingest] market 完成：index=N 日, institutional=true, stocks=NNNN 檔`。接著查 DB：
-
-```bash
-docker compose exec db psql -U stock -d stock -c "
-  SELECT trade_date, close, change FROM market_index_daily ORDER BY trade_date DESC LIMIT 5;
-  SELECT * FROM institutional_daily ORDER BY trade_date DESC LIMIT 3;
-  SELECT count(*) FROM stock_daily;"
-```
-
-把 `close` / `change` 對照 TWSE 官網當日數字——這是驗證解析正確性最直接的方法。
-
-### 5. 驗冪等（Phase 1 的核心承諾）
-
-```bash
-docker compose exec db psql -U stock -d stock -c "SELECT count(*) FROM stock_daily;"
-go run ./cmd/daily-stock ingest      # 再跑一次
-docker compose exec db psql -U stock -d stock -c "SELECT count(*) FROM stock_daily;"
-```
-
-兩次 count 必須相同。
-
-### 6. 新聞去重
-
-```bash
-go run ./cmd/daily-stock news    # 第一次：抓 N 則、新增 N 則
-go run ./cmd/daily-stock news    # 第二次：抓 N 則、新增 0 則 ← url 去重生效
-```
-
-### 7. 生成摘要（會呼叫 LLM，燒 token）
-
-```bash
-go run ./cmd/daily-stock summary
-go run ./cmd/daily-stock summary --date 2026-08-07
-```
-
-> **最重要的驗證**
-> 輸出裡的**每一個數字**都必須與步驟 4 查到的 DB 值完全一致。任何一個對不上，代表模板代入機制破了——那是 M7 信任防線的核心，比摘要文筆重要得多。
-
-### 8. reparse 與 backfill
-
-```bash
-go run ./cmd/daily-stock reparse
-go run ./cmd/daily-stock backfill --symbol 2330 --from 2026-05
-```
-
-> **注意**
-> 未設 `REDIS_ADDR` 時 **backfill 沒有 rate limit 保護**。回補大範圍前先把 Redis 設好，否則有被 TWSE 擋的風險——被 ban 整條管線都會停擺。
-
-### 9. eval
-
-```bash
-go run ./cmd/daily-stock eval
-```
-
-逐案印 ✅/❌ 與 pass rate，結果落 `eval_runs`。20 組都走完整 LLM 呼叫，換 provider 或改 prompt 後要重跑比較。
-
-### 10. 排程
-
-```bash
-go run ./cmd/daily-stock schedule
-```
-
-會停在 `[schedule] 排程啟動…`，但平日 17:30 / 18:30 才觸發，當下只會看到啟動 log 與每 30 分鐘的 news job。想立刻驗證觸發邏輯，把 `internal/scheduler/scheduler.go` 第 63–64 行的 cron spec 暫時改成 `*/2 * * * *`，確認 job 有跑、lock 有生效，測完改回來。
-
----
-
-## 六、已知落差
-
-| 項目 | 說明 | 處理 |
-| --- | --- | --- |
-| `internal/store` 無測試 | testcontainers 起真 pg 驗 upsert 冪等與 migration 可重放，是 DoD 項目但尚未實作 | ✅ 已於 Phase 1.5 週 2 前補上 |
-| README demo 輸出與排程 log 截圖 | DoD 項目 | Phase 1.5 週 3 |
-| 摘要不含個股 | `stock_daily` 已落地全市場資料，但摘要只涵蓋大盤與法人總額 | Phase 1.5 主題 |
-| 個股層級三大法人 | 目前只有 `BFI82U` 全市場總額，個股需 `T86` 端點 | Phase 1.5 週 2 |
-| 未還原股價 | TWSE 回的是未還原價，除權息日會出現假跳空 | Phase 1.5 週 3 |
-| Kafka 事件 | `ENABLE_KAFKA` 已在 config 預留，尚未接線 | Phase 3 才需要 |
-
----
-
-## 七、下一步
-
-Phase 1.5 — 自選股每日追蹤（自用版）：watchlist 持倉、個股三大法人（T86）、除權息還原、描述性統計、Discord 推播。三週垂直切片，規格見 `docs/phase-1.5.md`；暫緩項目與重啟條件見 `docs/BACKLOG.md`。
-
----
-
-本專案僅供個人學習與回測研究使用，不對外提供服務。所有產出均為研究與教育性質，**非投資建議**，不構成任何買賣邀約。
+- [ ] `docker compose up -d` 起 pg(pgvector) + redis,healthcheck 過
+- [ ] goose migrations 建齊 §2.2 全部表
+- [ ] `daily-stock schedule` 長駐:平日 17:30 自動抓大盤/法人/日K、18:30 自動生成摘要、每 30 分鐘抓新聞,全程無手動
+- [ ] 冪等驗證:同日重跑 ingest 任意次,各表資料不重複不變質
+- [ ] `raw_payloads` 有原始 payload,`daily-stock reparse` 可重放解析
+- [ ] `daily-stock backfill` 可回補個股歷史(帶 rate limit)
+- [ ] 出站呼叫走 rediskit rate limit;排程 job 有 rediskit lock
+- [ ] 摘要走模板代入,數字非 LLM 生成;`summaries` 落地
+- [ ] `llm.Provider` Claude 與 Ollama 至少一個跑通
+- [ ] 術語教學 ≥ 10 詞彙
+- [ ] eval set ≥ 20 組,`daily-stock eval` 可重跑,結果落 `eval_runs`
+- [ ] README 附 demo 輸出與排程 log 截圖
 
 </script>
 
